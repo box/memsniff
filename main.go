@@ -27,19 +27,24 @@ var (
 	profiles        = flag.StringSlice("profile", []string{}, "profile types to store (one or more of cpu, heap, block)")
 
 	filter     = flag.StringP("filter", "f", "", "regex pattern of cache keys to track")
-	footprint  = flag.Int("footprint", 100, "number of keys to track per analysis worker")
 	reportSize = flag.IntP("top", "t", 100, "number of keys to report")
 	interval   = flag.IntP("interval", "n", 1, "report top keys every this many seconds")
 	cumulative = flag.Bool("cumulative", false, "accumulate keys over all time instead of an interval")
 
 	noDelay = flag.Bool("nodelay", false, "replay from file at maximum speed instead of rate of original capture")
 	noGui   = flag.Bool("nogui", false, "disable interactive interface")
+
+	displayVersion = flag.Bool("version", false, "display version information")
 )
 
 var logger = &log.ProxyLogger{}
 
 func main() {
 	flag.Parse()
+	if *displayVersion {
+		log.ConsoleLogger{}.Log(fmt.Sprintf("memsniff version %v (revision %v)", Version, GitRevision))
+		return
+	}
 
 	// Actually execute startProfiling(), capture the returned function (which writes
 	// profiling results), and defer it to be executed when main() exits.
@@ -47,9 +52,8 @@ func main() {
 
 	buffered := &log.BufferLogger{}
 	logger.SetLogger(buffered)
-	logger.Log(fmt.Sprintf("memsniff version %v (revision %v) starting", Version, GitRevision))
 
-	analysisPool := analysis.New(*analysisWorkers, *footprint, *reportSize)
+	analysisPool := analysis.New(*analysisWorkers, *reportSize)
 	analysisPool.SetFilterPattern(*filter)
 	packetSource, err := capture.New(*netInterface, *infile, *snapLen, *bufferSize, *noDelay)
 	if err != nil {

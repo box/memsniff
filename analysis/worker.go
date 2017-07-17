@@ -37,7 +37,7 @@ func (ki keyInfo) Weight() int {
 // up with incoming calls.
 var errQueueFull = errors.New("analysis worker queue full")
 
-func newWorker(footprint int) worker {
+func newWorker() worker {
 	w := worker{
 		hl:           hotlist.NewPerfect(),
 		kiChan:       make(chan keyInfo, 1024),

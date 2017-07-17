@@ -40,7 +40,7 @@ type Stats struct {
 // reportSize determines the number of entries returned from Report.
 //
 // Memory allocated for the Pool is proportional to numWorkers * footprint.
-func New(numWorkers, footprint, reportSize int) *Pool {
+func New(numWorkers, reportSize int) *Pool {
 	c := &Pool{
 		reportSize: reportSize,
 		workers:    make([]worker, numWorkers),
@@ -48,7 +48,7 @@ func New(numWorkers, footprint, reportSize int) *Pool {
 	}
 
 	for i := 0; i < numWorkers; i++ {
-		c.workers[i] = newWorker(footprint)
+		c.workers[i] = newWorker()
 	}
 
 	return c
