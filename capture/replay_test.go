@@ -1,0 +1,103 @@
+package capture
+
+import (
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/pcap"
+	"testing"
+	"time"
+)
+
+type testSource struct {
+	pd []PacketData
+}
+
+func (s *testSource) CollectPackets(pd []PacketData) (count int, err error) {
+	n := copy(pd, s.pd)
+	s.pd = s.pd[n:]
+	if n == 0 {
+		return 0, pcap.NextErrorTimeoutExpired
+	}
+	return n, nil
+}
+
+func (s *testSource) DiscardPacket() error {
+	if len(s.pd) > 0 {
+		s.pd = s.pd[1:]
+	}
+	return nil
+}
+
+func (s *testSource) Stats() (*pcap.Stats, error) {
+	return &pcap.Stats{}, nil
+}
+
+func (s *testSource) AddPacket(t time.Time, d []byte) {
+	ci := gopacket.CaptureInfo{
+		Timestamp:     t,
+		CaptureLength: len(d),
+		Length:        len(d),
+	}
+	s.pd = append(s.pd, PacketData{ci, d})
+}
+
+func TestPacing(t *testing.T) {
+	start := time.Time{}.Add(time.Hour)
+	delay := 2 * replayerTimeout
+	ts := &testSource{}
+	ts.AddPacket(start, []byte{0})
+	ts.AddPacket(start.Add(delay), []byte{1})
+
+	uut := newReplayer(ts, 1000)
+	buf := NewPacketBuffer(1000, 1)
+
+	var n int
+	var err error
+
+	n, err = uut.CollectPackets(buf)
+	if n != 1 {
+		t.Error(err)
+	}
+
+	// expect no more data until time has passed
+	n, err = uut.CollectPackets(buf)
+	if n != 0 || err != pcap.NextErrorTimeoutExpired {
+		t.Error("got", n, "packet too early:", err)
+	}
+
+	time.Sleep(replayerTimeout)
+	n, err = uut.CollectPackets(buf)
+	if n != 1 {
+		t.Error(err)
+	}
+}
+
+func TestDrop(t *testing.T) {
+	start := time.Time{}.Add(time.Hour)
+	delay := 2 * replayerTimeout
+	ts := &testSource{}
+	ts.AddPacket(start, []byte{0})
+	ts.AddPacket(start.Add(delay), []byte{1})
+
+	uut := newReplayer(ts, 1000)
+	buf := NewPacketBuffer(1000, 1)
+
+	var n int
+	var err error
+
+	n, err = uut.CollectPackets(buf)
+	if n != 1 {
+		t.Error(err)
+	}
+
+	time.Sleep(2 * delay)
+	_, err = uut.CollectPackets(buf)
+	if err != pcap.NextErrorTimeoutExpired {
+		t.Error(err)
+	}
+
+	var s *pcap.Stats
+	s, err = uut.Stats()
+	if s.PacketsDropped != 1 {
+		t.Error("expected a dropped packet")
+	}
+}
