@@ -7,6 +7,10 @@ import (
 	"github.com/google/gopacket/layers"
 )
 
+const (
+	batchSize = 1000
+)
+
 // DecodedPacket holds the broken down structure of a decoded TCP packet.
 type DecodedPacket struct {
 	Info gopacket.CaptureInfo
@@ -25,7 +29,9 @@ type DecodedPacket struct {
 	NetFlow   gopacket.Flow
 }
 
-func (dp *DecodedPacket) init() {
+func newDecodedPacket() *DecodedPacket {
+	dp := &DecodedPacket{}
+
 	dp.ethParser = gopacket.NewDecodingLayerParser(dp.ether.LayerType())
 	dp.ethParser.AddDecodingLayer(&dp.ether)
 	dp.ethParser.AddDecodingLayer(&dp.dot1q)
@@ -41,6 +47,8 @@ func (dp *DecodedPacket) init() {
 	dp.loParser.AddDecodingLayer(&dp.ipv6)
 	dp.loParser.AddDecodingLayer(&dp.TCP)
 	dp.loParser.AddDecodingLayer(&dp.Payload)
+
+	return dp
 }
 
 func (dp *DecodedPacket) IsTCP() bool {
@@ -52,31 +60,11 @@ func (dp *DecodedPacket) IsTCP() bool {
 	return false
 }
 
-// Handler is a user-provided function for processing a single packet.
-type Handler func(db DecodedPacket)
-
-type decoder struct {
-	logger        log.Logger
-	handler       Handler
-	largestPacket int
-	decoded       DecodedPacket
-}
-
-func newDecoder(logger log.Logger, handler Handler) *decoder {
-	d := &decoder{
-		logger:  logger,
-		handler: handler,
-	}
-	d.decoded.init()
-	return d
-}
-
 // decode parses a single packet from raw byte data and updates the decoded
 // field of d.
 //
 // decode is not threadsafe.
-func (d *decoder) decode(ci gopacket.CaptureInfo, data []byte) {
-	dp := d.decoded
+func (dp *DecodedPacket) decode(d *decoder, ci gopacket.CaptureInfo, data []byte) {
 	dp.Info = ci
 	dp.FlowHash = 0
 	dp.Payload = dp.Payload[:0]
@@ -108,14 +96,39 @@ func (d *decoder) decode(ci gopacket.CaptureInfo, data []byte) {
 	}
 }
 
+// Handler is a user-provided function for processing a single packet.
+type Handler func(db []*DecodedPacket)
+
+type decoder struct {
+	logger        log.Logger
+	handler       Handler
+	largestPacket int
+	decoded       []*DecodedPacket
+}
+
+func newDecoder(logger log.Logger, handler Handler) *decoder {
+	d := &decoder{
+		logger:  logger,
+		handler: handler,
+		decoded: make([]*DecodedPacket, batchSize),
+	}
+	for i := 0; i < len(d.decoded); i++ {
+		d.decoded[i] = newDecodedPacket()
+	}
+	return d
+}
+
 // decode parses a batch of packets from raw byte data and invokes d's handler
 // for each packet.
 //
 // decodeBatch is not threadsafe.
 func (d *decoder) decodeBatch(pb *capture.PacketBuffer) {
+	if pb.PacketLen() > len(d.decoded) {
+		panic("not enough space for decoded packets")
+	}
 	for i := 0; i < pb.PacketLen(); i++ {
 		pd := pb.Packet(i)
-		d.decode(pd.Info, pd.Data)
+		d.decoded[i].decode(d, pd.Info, pd.Data)
 		d.handler(d.decoded)
 	}
 }

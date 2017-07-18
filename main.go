@@ -110,14 +110,18 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 	}
 }
 
-func packetHandler(analysisPool *analysis.Pool) func(p decode.DecodedPacket) {
-	return func(p decode.DecodedPacket) {
-		if p.TCP.SrcPort == 11211 && len(p.Payload) > 0 {
-			// ignore err, just try to read what we can
-			responses, _ := protocol.Read(p.Payload)
-			for _, r := range responses {
-				analysisPool.HandleGetResponse(r)
+func packetHandler(analysisPool *analysis.Pool) func(dps []*decode.DecodedPacket) {
+	return func(dps []*decode.DecodedPacket) {
+		var allResponses []*protocol.GetResponse
+		for _, dp := range dps {
+			if dp.TCP.SrcPort == 11211 && len(dp.Payload) > 0 {
+				// ignore err, just try to read what we can
+				responses, _ := protocol.Read(dp.Payload)
+				allResponses = append(allResponses, responses...)
 			}
+		}
+		for _, r := range allResponses {
+			analysisPool.HandleGetResponse(r)
 		}
 	}
 }
