@@ -22,7 +22,7 @@ $ go get github.com/box/memsniff
 $ go build github.com/box/memsniff
 ```
 
-In typical Go fashion, you will find a single statically-linked `memsniff`
+In typical Go fashion, you will find a single `memsniff`
 binary in your working directory, ready to be transferred to your Memcache
 hosts, or packaged in your distribution's preferred format.
 
@@ -30,17 +30,14 @@ hosts, or packaged in your distribution's preferred format.
 ## Usage
 
 On most operating systems `memsniff` requires superuser privileges to capture
-network traffic from an interface, which you specify with the `-i` option:
+network traffic from an interface, which you specify with the `-i` option.
 
 
 ## Roadmap
 
-* Support non-default memcached server ports
-* Support listening to traffic from multiple server ports simultaneously
 * Support binary memcached protocol
 * Support additional operations beyond GET
 * Support alternate sorting methods
-* Capability to restrict data collection to keys that match a filter
 * Create a stable report format for output to disk
 * Automatic logging to disk when specified conditions are met (e.g. aggregate
   or single key traffic exceeds a threshold)
@@ -49,6 +46,9 @@ network traffic from an interface, which you specify with the `-i` option:
 
 
 ## Developing memsniff
+
+Want to contribute? First have a look at
+[CONTRIBUTING.md](https://github.com/box/memsniff/blob/master/CONTRIBUTING.md).
 
 #### Running the tests
 
