@@ -123,14 +123,15 @@ func newDecoder(logger log.Logger, handler Handler) *decoder {
 //
 // decodeBatch is not threadsafe.
 func (d *decoder) decodeBatch(pb *capture.PacketBuffer) {
-	if pb.PacketLen() > len(d.decoded) {
+	numPackets := pb.PacketLen()
+	if numPackets > len(d.decoded) {
 		panic("not enough space for decoded packets")
 	}
-	for i := 0; i < pb.PacketLen(); i++ {
+	for i := 0; i < numPackets; i++ {
 		pd := pb.Packet(i)
 		d.decoded[i].decode(d, pd.Info, pd.Data)
-		d.handler(d.decoded)
 	}
+	d.handler(d.decoded[:numPackets])
 }
 
 // based on boost::hash_combine
