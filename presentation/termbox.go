@@ -153,16 +153,16 @@ func (u *uiContext) renderFooter(rep analysis.Report) {
 	renderText(0, y, rep.Timestamp.Format("15:04:05.000"))
 
 	renderText(2, y, dropLabel(stats))
-	renderText(4, y, fmt.Sprintf("Packets: %10d", stats.PacketsReceived))
+	renderText(4, y, fmt.Sprintf("Packets: %10d", stats.PacketsPassedFilter))
 	renderText(6, y, fmt.Sprintf("GET responses: %10d", stats.ResponsesParsed))
 }
 
 func dropLabel(s Stats) string {
 	var dropRate float64
-	if s.PacketsReceived == 0 {
+	if s.PacketsPassedFilter == 0 {
 		dropRate = 0
 	} else {
-		dropRate = float64(s.PacketsDroppedTotal) / float64(s.PacketsReceived)
+		dropRate = float64(s.PacketsDroppedTotal) / float64(s.PacketsPassedFilter)
 	}
 
 	return fmt.Sprintf("Dropped: %d+%d+%d=%d (%5.2f%%)",

@@ -30,9 +30,17 @@ type uiContext struct {
 
 // Stats collects statistics on runtime performance to be displayed to the user.
 type Stats struct {
-	PacketsReceived        int
-	PacketsDroppedKernel   int
-	PacketsDroppedParser   int
+	// count of packets that entered the kernel BPF
+	PacketsEnteredFilter int
+	// count of packets that passed the BPF and queued or dropped by the kernel
+	PacketsPassedFilter int
+	// count of packets received from pcap
+	PacketsCaptured int
+	// count of packets dropped due to kernel buffer overflow
+	PacketsDroppedKernel int
+	// count of packets dropped due to no decoder available
+	PacketsDroppedParser int
+	// count of packets dropped due to analysis queue being full
 	PacketsDroppedAnalysis int
 	PacketsDroppedTotal    int
 	ResponsesParsed        int

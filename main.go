@@ -98,17 +98,19 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 	return func() presentation.Stats {
 		captureStats, err := captureProvider.Stats()
 		if err == nil {
-			stats.PacketsReceived = captureStats.PacketsReceived
+			stats.PacketsEnteredFilter = captureStats.PacketsReceived
 			stats.PacketsDroppedKernel = captureStats.PacketsIfDropped + captureStats.PacketsDropped
 		}
 
 		decodeStats := decodePool.Stats()
+		stats.PacketsCaptured = decodeStats.PacketsCaptured
 		stats.PacketsDroppedParser = decodeStats.PacketsDropped
 
 		analysisStats := analysisPool.Stats()
 		stats.ResponsesParsed = analysisStats.ResponsesHandled
 		stats.PacketsDroppedAnalysis = analysisStats.ResponsesDropped
 
+		stats.PacketsPassedFilter = stats.PacketsDroppedKernel + stats.PacketsCaptured
 		stats.PacketsDroppedTotal = stats.PacketsDroppedKernel + stats.PacketsDroppedParser + stats.PacketsDroppedAnalysis
 
 		return stats

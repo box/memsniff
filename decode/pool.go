@@ -13,7 +13,8 @@ type workerQueue chan *worker
 
 // Stats contains runtime performance statistics for a Pool.
 type Stats struct {
-	PacketsDropped int
+	PacketsCaptured int
+	PacketsDropped  int
 }
 
 // Pool is a set of workers for decoding network packets.  It is bound to a
@@ -94,6 +95,7 @@ func (p *Pool) sendToWorker(w *worker) error {
 		// to avoid an extra copy
 		err = p.src.CollectPackets(w.buf())
 		if err != pcap.NextErrorTimeoutExpired {
+			p.stats.PacketsCaptured += w.buf().PacketLen()
 			break
 		}
 	}
