@@ -40,29 +40,10 @@ func NewPool(logger log.Logger, snapLen int, numWorkers int, src capture.PacketS
 
 	for i := 0; i < numWorkers; i++ {
 		decoder := newDecoder(logger, handler)
-		p.startWorker(p.readyQ, decoder.decodeBatch, snapLen, 1000, i)
+		p.startWorker(p.readyQ, decoder.decodeBatch, 1000, 8*1024*1024, i)
 	}
 
 	return p
-}
-
-// startWorker creates a background Worker that will send itself to q when it
-// is ready for a new batch of packets.  This Worker can then be given work
-// or closed, which will clean up the goroutine.
-//
-// handler will be invoked on the Worker's background goroutine.
-//
-// snapLen and batchSize determine the dimensions of the slice returned
-// by Batch.
-func (p *Pool) startWorker(q workerQueue, handler packetHandler, snapLen int, batchSize int, id int) {
-	w := worker{
-		id:          id,
-		workerQueue: q,
-		pd:          capture.NewPacketBuffer(snapLen, batchSize),
-		workReady:   make(chan int, 1),
-		handler:     handler,
-	}
-	go w.loop()
 }
 
 // Run starts the Pool decoding packets from the configured PacketSource and
@@ -107,12 +88,11 @@ func (p *Pool) Stats() Stats {
 }
 
 func (p *Pool) sendToWorker(w *worker) error {
-	var cnt int
 	var err error
 	for {
 		// write packet data directly into the worker's working area
 		// to avoid an extra copy
-		cnt, err = p.src.CollectPackets(w.batch())
+		err = p.src.CollectPackets(w.buf())
 		if err != pcap.NextErrorTimeoutExpired {
 			break
 		}
@@ -125,6 +105,6 @@ func (p *Pool) sendToWorker(w *worker) error {
 		return err
 	}
 	// tell worker how much of its working area contains valid new packets
-	w.work(cnt)
+	w.work()
 	return nil
 }

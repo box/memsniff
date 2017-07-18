@@ -30,9 +30,8 @@ type StatProvider interface {
 
 // PacketSource is an abstract source of network packets.
 type PacketSource interface {
-	// CollectPackets fills pd with packets.
-	// Returns the number of packets written to the slice pd[:count].
-	CollectPackets(pd []PacketData) (count int, err error)
+	// CollectPackets fills pb with packets.
+	CollectPackets(pb *PacketBuffer) error
 	// DiscardPacket reads a single packet and discards its contents.
 	DiscardPacket() error
 	StatProvider
@@ -56,7 +55,7 @@ func New(netInterface string, infile string, snapLen int, bufferSize int, noDela
 		return nil, err
 	}
 	if !noDelay && infile != "" {
-		return newReplayer(source{handle}, snapLen), nil
+		return newReplayer(source{handle}, 1000, 8*1024*1024), nil
 	}
 	return source{handle}, nil
 }
@@ -112,41 +111,31 @@ func newLiveCapture(netInterface string, snapLen, bufferSize int) (*pcap.Handle,
 	return inactive.Activate()
 }
 
-// NewPacketBuffer allocates space to store size packets of snaplen bytes each.
-// The individual Data slices of each PacketData are subslices of a contiguous
-// block for better cache performance.  Avoid reslicing them to larger than
-// original size, or overlap may cause unexpected behavior.
-func NewPacketBuffer(snaplen, size int) []PacketData {
-	buf := make([]byte, size*snaplen)
-	b := make([]PacketData, size)
-	for i := 0; i < size; i++ {
-		b[i].Data = buf[i*snaplen : i*snaplen+snaplen]
-	}
-	return b
-}
-
-func (s source) CollectPackets(pd []PacketData) (count int, err error) {
-	l := len(pd)
+func (s source) CollectPackets(pb *PacketBuffer) error {
+	pb.Clear()
+	l := pb.PacketCap()
 	for i := 0; i < l; i++ {
 		// use ZeroCopyReadPacketData to avoid allocation, even though
 		// we copy the data later
 		buf, ci, err := s.ZeroCopyReadPacketData()
 		if (err == io.EOF || err == pcap.NextErrorTimeoutExpired) &&
 			i > 0 {
-			return i, nil
+			return nil
 		}
 		if err != nil {
-			return 0, err
+			return err
 		}
-		// buf is owned by ps and will be overwritten on next call to
-		// ZeroCopyReadPacketData
-		bytesCopied := copy(pd[i].Data, buf)
-		pd[i].Info = ci
-		if pd[i].Info.CaptureLength > bytesCopied {
-			pd[i].Info.CaptureLength = bytesCopied
+		// Append makes a copy of the data, which is required because
+		// buf is overwritten on the next call to ZeroCopyReadPacketData.
+		err = pb.Append(PacketData{ci, buf})
+		if err == ErrBytesFull {
+			return nil
+		}
+		if err != nil {
+			return err
 		}
 	}
-	return l, nil
+	return nil
 }
 
 func (s source) DiscardPacket() error {

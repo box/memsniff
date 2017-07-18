@@ -43,15 +43,16 @@ func TestSeparateGoroutine(t *testing.T) {
 
 	p := NewPool(testLogger{t}, 1500, 8, nil, handler)
 	w := <-p.readyQ
-	w.work(1)
+	w.buf().Append(capture.PacketData{})
+	w.work()
 	wg.Wait()
 }
 
 // emptySource is a capture.PacketSource that immediately returns EOF.
 type emptySource struct{}
 
-func (es emptySource) CollectPackets(pd []capture.PacketData) (int, error) {
-	return 0, io.EOF
+func (es emptySource) CollectPackets(pb *capture.PacketBuffer) error {
+	return io.EOF
 }
 
 func (es emptySource) DiscardPacket() error {

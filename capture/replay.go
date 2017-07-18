@@ -2,6 +2,7 @@ package capture
 
 import (
 	"fmt"
+	"github.com/box/memsniff/log"
 	"github.com/google/gopacket/pcap"
 	"time"
 )
@@ -10,19 +11,20 @@ import (
 // accompanying each packet.  It is most useful for recreating the input rate
 // of a previously captured pcap file.
 type replayer struct {
+	// A Logger instance for debugging.  No logging is done if nil.
+	Logger log.Logger
 	// The wall time that this replayer was created.
 	start time.Time
 	// The timestamp of the first packet returned from src, usually
 	// the first packet in a capture file.
 	first time.Time
 	// The buffer we ask src to fill as much as possible.
-	buf []PacketData
-	// A subslice of buf; the packets waiting to be returned to the user.
-	avail []PacketData
+	buf *PacketBuffer
+	// The next packet in buf to be returned to the user.
+	cursor int
 	// The number of packets returned to the user.  Used by Stats.
 	received int
 	dropped  int
-	snaplen  int
 	src      PacketSource
 }
 
@@ -30,80 +32,66 @@ type replayer struct {
 // waiting up to 10 ms to assemble a batch of packets.
 const replayerTimeout = -pcap.BlockForever
 
-func newReplayer(src PacketSource, snaplen int) PacketSource {
+func newReplayer(src PacketSource, batchSize int, maxBytes int) *replayer {
 	return &replayer{
-		snaplen: snaplen,
-		src:     src,
+		buf: NewPacketBuffer(batchSize, maxBytes),
+		src: src,
 	}
 }
 
-func (r *replayer) CollectPackets(pd []PacketData) (count int, err error) {
+func (r *replayer) CollectPackets(pb *PacketBuffer) error {
+	pb.Clear()
 	if r.start.IsZero() {
 		r.start = time.Now()
 	}
 
-	if len(r.buf) < len(pd) {
-		r.buf = NewPacketBuffer(r.snaplen, len(pd))
-		copy(r.buf, r.avail)
-		r.avail = r.buf[0:len(r.avail)]
-	}
-
 	elapsed := time.Since(r.start)
 	r.dropExpired(elapsed)
-	for len(r.avail) == 0 {
-		err = r.fill()
+	for r.cursor >= r.buf.PacketLen() {
+		err := r.fill()
 		if err != nil {
-			return 0, err
+			return err
 		}
 		r.dropExpired(elapsed)
 	}
 
 	writeUntil := r.first.Add(elapsed + replayerTimeout)
-	writeOffset := 0
-	for i, p := range r.avail {
+	for ; r.cursor < r.buf.PacketLen(); r.cursor++ {
+		p := r.buf.Packet(r.cursor)
+		r.received++
 		if p.Info.Timestamp.After(writeUntil) {
 			time.Sleep(replayerTimeout)
-			if writeOffset == 0 {
-				return 0, pcap.NextErrorTimeoutExpired
+			if pb.PacketLen() == 0 {
+				return pcap.NextErrorTimeoutExpired
 			}
-			r.avail = r.avail[i:]
-			r.received += i
-			return writeOffset, nil
+			return nil
 		}
-		pd[writeOffset].Info = p.Info
-		copy(pd[writeOffset].Data, p.Data)
-		writeOffset++
+		pb.Append(p)
 	}
 
-	r.received += len(r.avail)
-	r.avail = nil
-	return writeOffset, nil
+	return nil
 }
 
 func (r *replayer) dropExpired(elapsed time.Duration) {
 	dropUntil := r.first.Add(elapsed).Add(replayerTimeout / -2)
-	toDrop := len(r.avail)
-	for i, p := range r.avail {
+	for ; r.cursor < r.buf.PacketLen(); r.cursor++ {
+		p := r.buf.Packet(r.cursor)
 		if p.Info.Timestamp.After(dropUntil) {
-			toDrop = i
 			break
 		}
-	}
-	if toDrop > 0 {
-		r.dropped += toDrop
-		r.avail = r.avail[toDrop:]
+		r.dropped++
 	}
 }
 
 func (r *replayer) DiscardPacket() error {
-	if len(r.avail) == 0 {
+	if r.cursor >= r.buf.PacketLen() {
 		err := r.fill()
-		if len(r.avail) == 0 || err != nil {
+		if r.buf.PacketLen() == 0 || err != nil {
 			return err
 		}
 	}
 
-	p := r.avail[0]
+	p := r.buf.Packet(r.cursor)
 	offset := p.Info.Timestamp.Sub(r.first)
 	elapsed := time.Since(r.start)
 	if offset > elapsed+replayerTimeout {
@@ -111,7 +99,7 @@ func (r *replayer) DiscardPacket() error {
 		return pcap.NextErrorTimeoutExpired
 	}
 
-	r.avail = r.avail[1:]
+	r.cursor++
 	r.received++
 	return nil
 }
@@ -124,21 +112,27 @@ func (r *replayer) Stats() (*pcap.Stats, error) {
 }
 
 func (r *replayer) fill() error {
-	n, err := r.src.CollectPackets(r.buf)
-	r.avail = r.buf[:n]
-	if err != nil || n == 0 {
+	err := r.src.CollectPackets(r.buf)
+	if err != nil {
 		return err
 	}
+	r.cursor = 0
 	if r.first.IsZero() {
-		r.first = r.buf[0].Info.Timestamp
+		r.first = r.buf.Packet(0).Info.Timestamp
 	}
 	return nil
 }
 
 func (r *replayer) String() string {
 	var nextTimestamp time.Time
-	if len(r.avail) > 0 {
-		nextTimestamp = r.avail[0].Info.Timestamp
+	if r.cursor < r.buf.PacketLen() {
+		nextTimestamp = r.buf.Packet(r.cursor).Info.Timestamp
 	}
-	return fmt.Sprintf("{first=%v avail=%v next=%v}", r.first, len(r.avail), nextTimestamp)
+	return fmt.Sprintf("{first=%v avail=%v next=%v}", r.first, r.buf.PacketLen()-r.cursor, nextTimestamp)
+}
+
+func (r *replayer) log(items ...interface{}) {
+	if r.Logger != nil {
+		r.Logger.Log(items...)
+	}
 }

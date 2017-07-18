@@ -112,8 +112,9 @@ func (d *decoder) decode(ci gopacket.CaptureInfo, data []byte) {
 // for each packet.
 //
 // decodeBatch is not threadsafe.
-func (d *decoder) decodeBatch(pds []capture.PacketData) {
-	for _, pd := range pds {
+func (d *decoder) decodeBatch(pb *capture.PacketBuffer) {
+	for i := 0; i < pb.PacketLen(); i++ {
+		pd := pb.Packet(i)
 		d.decode(pd.Info, pd.Data)
 		d.handler(d.decoded)
 	}

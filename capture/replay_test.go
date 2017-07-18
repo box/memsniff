@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"github.com/box/memsniff/log"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 	"testing"
@@ -11,13 +12,16 @@ type testSource struct {
 	pd []PacketData
 }
 
-func (s *testSource) CollectPackets(pd []PacketData) (count int, err error) {
-	n := copy(pd, s.pd)
-	s.pd = s.pd[n:]
-	if n == 0 {
-		return 0, pcap.NextErrorTimeoutExpired
+func (s *testSource) CollectPackets(pb *PacketBuffer) error {
+	pb.Clear()
+	if len(s.pd) == 0 {
+		return pcap.NextErrorTimeoutExpired
 	}
-	return n, nil
+	for _, pd := range s.pd {
+		pb.Append(pd)
+	}
+	s.pd = nil
+	return nil
 }
 
 func (s *testSource) DiscardPacket() error {
@@ -42,30 +46,33 @@ func (s *testSource) AddPacket(t time.Time, d []byte) {
 
 func TestPacing(t *testing.T) {
 	start := time.Time{}.Add(time.Hour)
-	delay := 2 * replayerTimeout
+	delay := 4 * replayerTimeout
 	ts := &testSource{}
 	ts.AddPacket(start, []byte{0})
 	ts.AddPacket(start.Add(delay), []byte{1})
 
-	uut := newReplayer(ts, 1000)
+	uut := newReplayer(ts, 1000, 8*1024*1024)
+	uut.Logger = log.ConsoleLogger{}
 	buf := NewPacketBuffer(1000, 1)
 
-	var n int
 	var err error
 
-	n, err = uut.CollectPackets(buf)
+	err = uut.CollectPackets(buf)
+	n := buf.PacketLen()
 	if n != 1 {
 		t.Error(err)
 	}
 
 	// expect no more data until time has passed
-	n, err = uut.CollectPackets(buf)
+	err = uut.CollectPackets(buf)
+	n = buf.PacketLen()
 	if n != 0 || err != pcap.NextErrorTimeoutExpired {
 		t.Error("got", n, "packet too early:", err)
 	}
 
 	time.Sleep(replayerTimeout)
-	n, err = uut.CollectPackets(buf)
+	err = uut.CollectPackets(buf)
+	n = buf.PacketLen()
 	if n != 1 {
 		t.Error(err)
 	}
@@ -78,19 +85,19 @@ func TestDrop(t *testing.T) {
 	ts.AddPacket(start, []byte{0})
 	ts.AddPacket(start.Add(delay), []byte{1})
 
-	uut := newReplayer(ts, 1000)
+	uut := newReplayer(ts, 1000, 8*1024*1024)
 	buf := NewPacketBuffer(1000, 1)
 
-	var n int
 	var err error
 
-	n, err = uut.CollectPackets(buf)
+	err = uut.CollectPackets(buf)
+	n := buf.PacketLen()
 	if n != 1 {
 		t.Error(err)
 	}
 
 	time.Sleep(2 * delay)
-	_, err = uut.CollectPackets(buf)
+	err = uut.CollectPackets(buf)
 	if err != pcap.NextErrorTimeoutExpired {
 		t.Error(err)
 	}
