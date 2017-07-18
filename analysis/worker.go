@@ -11,7 +11,7 @@ type worker struct {
 	// hotlist of the busiest cache keys tracked by this worker
 	hl hotlist.HotList
 	// channel for reports of cache key activity
-	kiChan chan keyInfo
+	kisChan chan []keyInfo
 	// channel for requests for the current contents of the hotlist
 	topRequest chan int
 	// channel for results of top() requests
@@ -40,7 +40,7 @@ var errQueueFull = errors.New("analysis worker queue full")
 func newWorker() worker {
 	w := worker{
 		hl:           hotlist.NewPerfect(),
-		kiChan:       make(chan keyInfo, 1024),
+		kisChan:      make(chan []keyInfo, 1024),
 		topRequest:   make(chan int),
 		topReply:     make(chan []hotlist.Entry),
 		resetRequest: make(chan bool),
@@ -54,12 +54,15 @@ func newWorker() worker {
 // handleGetResponse is threadsafe.
 // When handleGetResponse returns, all relevant data from r has been copied
 // and is safe for the caller to discard.
-func (w *worker) handleGetResponse(r *protocol.GetResponse) error {
+func (w *worker) handleGetResponses(rs []*protocol.GetResponse) error {
 	// Make sure we copy r.Key before we return, since it may be a pointer
 	// into a buffer that will be overwritten.
-	ki := keyInfo{string(r.Key), r.Size}
+	kis := make([]keyInfo, len(rs))
+	for i, r := range rs {
+		kis[i] = keyInfo{string(r.Key), r.Size}
+	}
 	select {
-	case w.kiChan <- ki:
+	case w.kisChan <- kis:
 		return nil
 	default:
 		return errQueueFull
@@ -83,17 +86,19 @@ func (w *worker) reset() {
 // close exits this worker. Calls to handleGetResponse after calling close
 // will panic.
 func (w *worker) close() {
-	close(w.kiChan)
+	close(w.kisChan)
 }
 
 func (w *worker) loop() {
 	for {
 		select {
-		case ki, isOpen := <-w.kiChan:
-			if !isOpen {
+		case kis, ok := <-w.kisChan:
+			if !ok {
 				return
 			}
-			w.hl.AddWeighted(ki)
+			for _, ki := range kis {
+				w.hl.AddWeighted(ki)
+			}
 
 		case k := <-w.topRequest:
 			w.topReply <- w.hl.Top(k)

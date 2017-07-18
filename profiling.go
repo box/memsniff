@@ -50,7 +50,7 @@ func dumpProfile(p string) {
 		log.Fatalln(err)
 	}
 	defer func() {
-		if err := f.Close(); err != nil {
+		if err = f.Close(); err != nil {
 			log.Fatalln("Could not close profile", p, err)
 		}
 	}()

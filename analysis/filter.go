@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"github.com/box/memsniff/protocol"
 	"regexp"
 	"sync"
 )
@@ -11,9 +12,19 @@ type filter struct {
 	r *regexp.Regexp
 }
 
-func (f *filter) match(bs []byte) bool {
-	r := f.regex()
-	return r == nil || r.Match(bs)
+func (f *filter) filterResponses(rs []*protocol.GetResponse) []*protocol.GetResponse {
+	re := f.regex()
+	if re == nil {
+		return rs
+	}
+
+	matches := make([]*protocol.GetResponse, 0, len(rs))
+	for _, r := range rs {
+		if re.Match(r.Key) {
+			matches = append(matches, r)
+		}
+	}
+	return matches
 }
 
 func (f *filter) regex() *regexp.Regexp {

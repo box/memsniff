@@ -53,7 +53,11 @@ func main() {
 	logger.SetLogger(buffered)
 
 	analysisPool := analysis.New(*analysisWorkers, *reportSize)
-	analysisPool.SetFilterPattern(*filter)
+	if err := analysisPool.SetFilterPattern(*filter); err != nil {
+		(&log.ConsoleLogger{}).Log(err)
+		os.Exit(1)
+	}
+
 	packetSource, err := capture.New(*netInterface, *infile, *bufferSize, *noDelay)
 	if err != nil {
 		(&log.ConsoleLogger{}).Log(err)
@@ -120,8 +124,6 @@ func packetHandler(analysisPool *analysis.Pool) func(dps []*decode.DecodedPacket
 				allResponses = append(allResponses, responses...)
 			}
 		}
-		for _, r := range allResponses {
-			analysisPool.HandleGetResponse(r)
-		}
+		analysisPool.HandleGetResponses(allResponses)
 	}
 }

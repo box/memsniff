@@ -1,16 +1,17 @@
 package analysis
 
 import (
+	"github.com/box/memsniff/protocol"
 	"testing"
 )
 
 func TestEmptyMatchesAll(t *testing.T) {
 	f := filter{}
 	f.setPattern("")
-	if !f.match([]byte("hello")) {
+	if !match(f, []byte("hello")) {
 		t.Fail()
 	}
-	if !f.match([]byte("")) {
+	if !match(f, []byte("")) {
 		t.Fail()
 	}
 }
@@ -18,7 +19,7 @@ func TestEmptyMatchesAll(t *testing.T) {
 func TestPatternMatchesSubstring(t *testing.T) {
 	var f filter
 	f.setPattern("world")
-	if !f.match([]byte("hello world")) {
+	if !match(f, []byte("hello world")) {
 		t.Fail()
 	}
 }
@@ -26,7 +27,7 @@ func TestPatternMatchesSubstring(t *testing.T) {
 func TestPatternFiltersNonMatching(t *testing.T) {
 	var f filter
 	f.setPattern("world")
-	if f.match([]byte("hello nurse")) {
+	if match(f, []byte("hello nurse")) {
 		t.Fail()
 	}
 }
@@ -35,7 +36,7 @@ func TestEmptyOverwritesPrior(t *testing.T) {
 	var f filter
 	f.setPattern("hello")
 	f.setPattern("")
-	if !f.match([]byte("foobar")) {
+	if !match(f, []byte("foobar")) {
 		t.Fail()
 	}
 }
@@ -46,7 +47,15 @@ func TestInvalidMatchesAll(t *testing.T) {
 	if err == nil {
 		t.Error("did not return error for invalid regex")
 	}
-	if !f.match([]byte("foobar")) {
+	if !match(f, []byte("foobar")) {
 		t.Error("invalid pattern should match all")
 	}
+}
+
+func match(f filter, bs []byte) bool {
+	return len(f.filterResponses([]*protocol.GetResponse{
+		&protocol.GetResponse{
+			Key: bs,
+		},
+	})) == 1
 }

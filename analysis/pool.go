@@ -3,8 +3,8 @@
 package analysis
 
 import (
+	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/protocol"
-	"hash"
 	"hash/fnv"
 )
 
@@ -13,9 +13,10 @@ import (
 // prioritizes responsiveness over consistency, and data is dropped if the
 // rate of input is too high to be handled by the Pool.
 type Pool struct {
+	// A Logger instance for debugging.  No logging is done if nil.
+	Logger     log.Logger
 	reportSize int
 	workers    []worker
-	hash       hash.Hash64
 	filter     filter
 	stats      Stats
 }
@@ -34,17 +35,11 @@ type Stats struct {
 // workers gives more potential parallelism and performance, but increased
 // memory consumption.
 //
-// footprint determines the amount of data tracked in the hotlist for each
-// worker, in arbitrary units dependent on the specific hotlist implementation.
-//
 // reportSize determines the number of entries returned from Report.
-//
-// Memory allocated for the Pool is proportional to numWorkers * footprint.
 func New(numWorkers, reportSize int) *Pool {
 	c := &Pool{
 		reportSize: reportSize,
 		workers:    make([]worker, numWorkers),
-		hash:       fnv.New64a(),
 	}
 
 	for i := 0; i < numWorkers; i++ {
@@ -61,17 +56,27 @@ func New(numWorkers, reportSize int) *Pool {
 // updated to reflect the lost data.
 //
 // HandleGetResponse is threadsafe.
-func (p *Pool) HandleGetResponse(r *protocol.GetResponse) {
-	if !p.filter.match(r.Key) {
-		return
+func (p *Pool) HandleGetResponses(rs []*protocol.GetResponse) {
+	perWorkerResponses := p.partitionResponses(p.filter.filterResponses(rs))
+	for i, responses := range perWorkerResponses {
+		if len(responses) > 0 {
+			err := p.workers[i].handleGetResponses(responses)
+			if err == errQueueFull {
+				p.stats.ResponsesDropped += len(responses)
+				continue
+			}
+			p.stats.ResponsesHandled += len(responses)
+		}
 	}
-	worker := p.getWorker(r.Key)
-	err := worker.handleGetResponse(r)
-	if err == errQueueFull {
-		p.stats.ResponsesDropped++
-		return
+}
+
+func (p *Pool) partitionResponses(rs []*protocol.GetResponse) [][]*protocol.GetResponse {
+	perWorkerResponses := make([][]*protocol.GetResponse, len(p.workers))
+	for _, r := range rs {
+		slot := p.keySlot(r.Key)
+		perWorkerResponses[slot] = append(perWorkerResponses[slot], r)
 	}
-	p.stats.ResponsesHandled++
+	return perWorkerResponses
 }
 
 // SetFilterPattern sets an RE2 pattern for future data points.  Only operations
@@ -110,9 +115,9 @@ func (p *Pool) getWorker(key []byte) worker {
 }
 
 func (p *Pool) keySlot(key []byte) int {
-	p.hash.Reset()
+	hash := fnv.New64a()
 	// writing to a Hash can never fail
-	_, _ = p.hash.Write(key)
-	h := p.hash.Sum64() % uint64(len(p.workers))
+	_, _ = hash.Write(key)
+	h := hash.Sum64() % uint64(len(p.workers))
 	return int(h)
 }

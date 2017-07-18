@@ -25,7 +25,7 @@ func TestSeparateGoroutine(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	handler := func(p DecodedPacket) {
+	handler := func(dps []*DecodedPacket) {
 		defer wg.Done()
 		for i := 1; ; i++ {
 			pc, _, _, ok := runtime.Caller(i)
@@ -41,7 +41,7 @@ func TestSeparateGoroutine(t *testing.T) {
 		}
 	}
 
-	p := NewPool(testLogger{t}, 1500, 8, nil, handler)
+	p := NewPool(testLogger{t}, 8, nil, handler)
 	w := <-p.readyQ
 	w.buf().Append(capture.PacketData{})
 	w.work()
@@ -68,7 +68,7 @@ func (es emptySource) Stats() (*pcap.Stats, error) {
 func TestGoroutineCount(t *testing.T) {
 	workers := 4
 	before := runtime.NumGoroutine()
-	p := NewPool(testLogger{t}, 1500, workers, &emptySource{}, nil)
+	p := NewPool(testLogger{t}, workers, &emptySource{}, nil)
 	after := runtime.NumGoroutine()
 	if after != before+workers {
 		t.Error("NewPool started", after-before, "new goroutines instead of", workers)
