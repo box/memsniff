@@ -19,7 +19,6 @@ import (
 var (
 	netInterface = flag.StringP("interface", "i", "", "network interface to sniff")
 	infile       = flag.StringP("read", "r", "", "file to read (- for stdin)")
-	snapLen      = flag.IntP("snaplen", "s", 1600, "maximum bytes of packet data to capture")
 	bufferSize   = flag.IntP("buffersize", "b", 8, "MiB of kernel buffer for packet data")
 
 	decodeWorkers   = flag.Int("decodeworkers", 8, "number of decode workers")
@@ -55,13 +54,13 @@ func main() {
 
 	analysisPool := analysis.New(*analysisWorkers, *reportSize)
 	analysisPool.SetFilterPattern(*filter)
-	packetSource, err := capture.New(*netInterface, *infile, *snapLen, *bufferSize, *noDelay)
+	packetSource, err := capture.New(*netInterface, *infile, *bufferSize, *noDelay)
 	if err != nil {
 		(&log.ConsoleLogger{}).Log(err)
 		os.Exit(2)
 	}
 
-	decodePool := decode.NewPool(logger, *snapLen, *decodeWorkers, packetSource, packetHandler(analysisPool))
+	decodePool := decode.NewPool(logger, *decodeWorkers, packetSource, packetHandler(analysisPool))
 	go decodePool.Run()
 
 	if *noGui {

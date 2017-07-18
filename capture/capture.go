@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+const (
+	snapLen = 65535
+)
+
 var (
 	ErrNoSource        = errors.New("must specify a network interface or file")
 	ErrAmbiguousSource = errors.New("cannot specify both network interface and file")
@@ -42,15 +46,14 @@ type source struct {
 }
 
 // New creates a PacketSource bound to the specified network interface or pcap
-// file.  When performing live capture, only the first snapLen bytes of each
-// packet are captured.
+// file.
 //
 // bufferSize determines the amount of kernel memory (in MiB) to allocate for
 // temporary storage. A larger bufferSize can reduce dropped packets as
 // revealed by Stats, but use caution as kernel memory is a precious resource.
-func New(netInterface string, infile string, snapLen int, bufferSize int, noDelay bool) (PacketSource, error) {
+func New(netInterface string, infile string, bufferSize int, noDelay bool) (PacketSource, error) {
 	var err error
-	handle, err := makeHandle(netInterface, infile, snapLen, bufferSize)
+	handle, err := makeHandle(netInterface, infile, bufferSize)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +63,7 @@ func New(netInterface string, infile string, snapLen int, bufferSize int, noDela
 	return source{handle}, nil
 }
 
-func makeHandle(netInterface string, infile string, snapLen int, bufferSize int) (*pcap.Handle, error) {
+func makeHandle(netInterface string, infile string, bufferSize int) (*pcap.Handle, error) {
 	var src *pcap.Handle
 	var err error
 
@@ -68,7 +71,7 @@ func makeHandle(netInterface string, infile string, snapLen int, bufferSize int)
 		return nil, ErrAmbiguousSource
 	}
 	if netInterface != "" {
-		src, err = newLiveCapture(netInterface, snapLen, bufferSize)
+		src, err = newLiveCapture(netInterface, bufferSize)
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +88,7 @@ func makeHandle(netInterface string, infile string, snapLen int, bufferSize int)
 	return src, nil
 }
 
-func newLiveCapture(netInterface string, snapLen, bufferSize int) (*pcap.Handle, error) {
+func newLiveCapture(netInterface string, bufferSize int) (*pcap.Handle, error) {
 	inactive, err := pcap.NewInactiveHandle(netInterface)
 	defer inactive.CleanUp()
 	if err != nil {

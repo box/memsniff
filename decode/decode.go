@@ -91,7 +91,7 @@ func (d *decoder) decode(ci gopacket.CaptureInfo, data []byte) {
 	}
 
 	if parser.Truncated && ci.Length > d.largestPacket {
-		d.logger.Log("Packet of length", ci.Length, "truncated. Consider increasing snaplen.")
+		d.logger.Log("Found truncated packet of length", ci.Length)
 		d.largestPacket = ci.Length
 	}
 	var netFlow gopacket.Flow

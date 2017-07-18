@@ -30,7 +30,7 @@ type Pool struct {
 // NewPool creates a new Pool of workers.  As packets are captured and decoded,
 // handler is invoked.  handler is invoked from multiple worker gorountines
 // concurrently and thus must be threadsafe.
-func NewPool(logger log.Logger, snapLen int, numWorkers int, src capture.PacketSource, handler Handler) *Pool {
+func NewPool(logger log.Logger, numWorkers int, src capture.PacketSource, handler Handler) *Pool {
 	p := &Pool{
 		logger:     logger,
 		numWorkers: numWorkers,
