@@ -7,6 +7,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 	"io"
+	"strconv"
 	"time"
 )
 
@@ -51,10 +52,17 @@ type source struct {
 // bufferSize determines the amount of kernel memory (in MiB) to allocate for
 // temporary storage. A larger bufferSize can reduce dropped packets as
 // revealed by Stats, but use caution as kernel memory is a precious resource.
-func New(netInterface string, infile string, bufferSize int, noDelay bool) (PacketSource, error) {
+func New(netInterface string, infile string, bufferSize int, noDelay bool, ports []int) (PacketSource, error) {
 	var err error
 	handle, err := makeHandle(netInterface, infile, bufferSize)
 	if err != nil {
+		return nil, err
+	}
+	bpf, err := portFilter(ports)
+	if err != nil {
+		return nil, err
+	}
+	if err = handle.SetBPFFilter(bpf); err != nil {
 		return nil, err
 	}
 	if !noDelay && infile != "" {
@@ -86,6 +94,20 @@ func makeHandle(netInterface string, infile string, bufferSize int) (*pcap.Handl
 	}
 
 	return src, nil
+}
+
+func portFilter(ports []int) (string, error) {
+	if len(ports) < 1 {
+		return "", errors.New("need at least one port")
+	}
+
+	filterExpr := []byte("tcp src port " + strconv.Itoa(int(ports[0])))
+	for _, port := range ports[1:] {
+		filterExpr = append(filterExpr,
+			[]byte(" or tcp src port "+strconv.Itoa(int(port)))...)
+	}
+
+	return string(filterExpr), nil
 }
 
 func newLiveCapture(netInterface string, bufferSize int) (*pcap.Handle, error) {

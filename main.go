@@ -20,6 +20,7 @@ var (
 	netInterface = flag.StringP("interface", "i", "", "network interface to sniff")
 	infile       = flag.StringP("read", "r", "", "file to read (- for stdin)")
 	bufferSize   = flag.IntP("buffersize", "b", 8, "MiB of kernel buffer for packet data")
+	ports        = flag.IntSliceP("ports", "p", []int{11211}, "memcached ports to listen on")
 
 	decodeWorkers   = flag.Int("decodeworkers", 8, "number of decode workers")
 	analysisWorkers = flag.Int("analysisworkers", 32, "number of analysis workers")
@@ -58,7 +59,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	packetSource, err := capture.New(*netInterface, *infile, *bufferSize, *noDelay)
+	packetSource, err := capture.New(*netInterface, *infile, *bufferSize, *noDelay, *ports)
 	if err != nil {
 		(&log.ConsoleLogger{}).Log(err)
 		os.Exit(2)
@@ -118,7 +119,7 @@ func packetHandler(analysisPool *analysis.Pool) func(dps []*decode.DecodedPacket
 	return func(dps []*decode.DecodedPacket) {
 		var allResponses []*protocol.GetResponse
 		for _, dp := range dps {
-			if dp.TCP.SrcPort == 11211 && len(dp.Payload) > 0 {
+			if len(dp.Payload) > 0 {
 				// ignore err, just try to read what we can
 				responses, _ := protocol.Read(dp.Payload)
 				allResponses = append(allResponses, responses...)
