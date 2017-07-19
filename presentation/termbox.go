@@ -35,7 +35,8 @@ func (u *uiContext) runTermbox() error {
 }
 
 func (u *uiContext) eventLoop() error {
-	updateTick := time.Tick(u.interval)
+	updateTick := time.NewTicker(u.interval)
+	defer updateTick.Stop()
 	events := termboxEvents()
 	if err := u.update(); err != nil {
 		return err
@@ -43,7 +44,7 @@ func (u *uiContext) eventLoop() error {
 
 	for {
 		select {
-		case <-updateTick:
+		case <-updateTick.C:
 			if err := u.update(); err != nil {
 				return err
 			}

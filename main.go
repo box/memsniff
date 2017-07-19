@@ -72,7 +72,7 @@ func main() {
 		logger.SetLogger(log.ConsoleLogger{})
 		buffered.WriteTo(logger)
 
-		exitChan := make(chan os.Signal)
+		exitChan := make(chan os.Signal, 1)
 		signal.Notify(exitChan, os.Interrupt)
 		<-exitChan
 	} else {

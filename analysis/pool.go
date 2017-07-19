@@ -49,11 +49,11 @@ func New(numWorkers, reportSize int) *Pool {
 	return c
 }
 
-// HandleGetResponse adds a record of a cache GET operation to the Pool.
+// HandleGetResponses adds records for a set of cache GET operation to the Pool.
 //
-// The GetResponse will be dispatched to its assigned worker.  If the worker
-// is overloaded, the input will be discarded and statistics for this Pool
-// updated to reflect the lost data.
+// The GetResponses will be dispatched to its assigned worker.  If the worker
+// is overloaded, all inputs for that worker  will be discarded and statistics
+// for this Pool updated to reflect the lost data.
 //
 // HandleGetResponse is threadsafe.
 func (p *Pool) HandleGetResponses(rs []*protocol.GetResponse) {

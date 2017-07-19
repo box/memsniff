@@ -18,7 +18,9 @@ func (s *testSource) CollectPackets(pb *PacketBuffer) error {
 		return pcap.NextErrorTimeoutExpired
 	}
 	for _, pd := range s.pd {
-		pb.Append(pd)
+		if err := pb.Append(pd); err != nil {
+			return err
+		}
 	}
 	s.pd = nil
 	return nil
@@ -55,9 +57,7 @@ func TestPacing(t *testing.T) {
 	uut.Logger = log.ConsoleLogger{}
 	buf := NewPacketBuffer(1000, 1)
 
-	var err error
-
-	err = uut.CollectPackets(buf)
+	err := uut.CollectPackets(buf)
 	n := buf.PacketLen()
 	if n != 1 {
 		t.Error(err)
@@ -88,9 +88,7 @@ func TestDrop(t *testing.T) {
 	uut := newReplayer(ts, 1000, 8*1024*1024)
 	buf := NewPacketBuffer(1000, 1)
 
-	var err error
-
-	err = uut.CollectPackets(buf)
+	err := uut.CollectPackets(buf)
 	n := buf.PacketLen()
 	if n != 1 {
 		t.Error(err)
@@ -103,7 +101,7 @@ func TestDrop(t *testing.T) {
 	}
 
 	var s *pcap.Stats
-	s, err = uut.Stats()
+	s, _ = uut.Stats()
 	if s.PacketsDropped != 1 {
 		t.Error("expected a dropped packet")
 	}

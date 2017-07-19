@@ -66,7 +66,9 @@ func (r *replayer) CollectPackets(pb *PacketBuffer) error {
 			}
 			return nil
 		}
-		pb.Append(p)
+		if err := pb.Append(p); err != nil {
+			return err
+		}
 	}
 
 	return nil

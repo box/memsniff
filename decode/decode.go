@@ -51,6 +51,7 @@ func newDecodedPacket() *DecodedPacket {
 	return dp
 }
 
+// IsTCP returns true if dp was successfully decoded as a TCP packet.
 func (dp *DecodedPacket) IsTCP() bool {
 	for _, lt := range dp.decoded {
 		if lt == layers.LayerTypeTCP {

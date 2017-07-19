@@ -2,6 +2,10 @@ package hotlist
 
 type perfectHotlist map[Item]int
 
+// NewPerfect returns an implementation of HotList that tracks all items
+// added, without sampling loss.
+//
+// Note that the returned HotList has unbounded memory consumption.
 func NewPerfect() HotList {
 	return perfectHotlist(make(map[Item]int))
 }

@@ -6,8 +6,8 @@ import (
 )
 
 func TestEmptyMatchesAll(t *testing.T) {
-	f := filter{}
-	f.setPattern("")
+	f := &filter{}
+	_ = f.setPattern("")
 	if !match(f, []byte("hello")) {
 		t.Fail()
 	}
@@ -17,32 +17,32 @@ func TestEmptyMatchesAll(t *testing.T) {
 }
 
 func TestPatternMatchesSubstring(t *testing.T) {
-	var f filter
-	f.setPattern("world")
+	f := &filter{}
+	_ = f.setPattern("world")
 	if !match(f, []byte("hello world")) {
 		t.Fail()
 	}
 }
 
 func TestPatternFiltersNonMatching(t *testing.T) {
-	var f filter
-	f.setPattern("world")
+	f := &filter{}
+	_ = f.setPattern("world")
 	if match(f, []byte("hello nurse")) {
 		t.Fail()
 	}
 }
 
 func TestEmptyOverwritesPrior(t *testing.T) {
-	var f filter
-	f.setPattern("hello")
-	f.setPattern("")
+	f := &filter{}
+	_ = f.setPattern("hello")
+	_ = f.setPattern("")
 	if !match(f, []byte("foobar")) {
 		t.Fail()
 	}
 }
 
 func TestInvalidMatchesAll(t *testing.T) {
-	var f filter
+	f := &filter{}
 	err := f.setPattern("[abc")
 	if err == nil {
 		t.Error("did not return error for invalid regex")
@@ -52,7 +52,7 @@ func TestInvalidMatchesAll(t *testing.T) {
 	}
 }
 
-func match(f filter, bs []byte) bool {
+func match(f *filter, bs []byte) bool {
 	return len(f.filterResponses([]*protocol.GetResponse{
 		&protocol.GetResponse{
 			Key: bs,

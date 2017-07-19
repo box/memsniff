@@ -6,7 +6,10 @@ import (
 )
 
 var (
-	ErrBytesFull   = errors.New("PacketBuffer out of space for more bytes")
+	// ErrBytesFull is returned if the PacketBuffer cannot hold enough
+	// data bytes to store this packet
+	ErrBytesFull = errors.New("PacketBuffer out of space for more bytes")
+	// ErrPacketsFull is returned if the PacketBuffer cannot hold more packets
 	ErrPacketsFull = errors.New("PacketBuffer out of space for more packets")
 )
 

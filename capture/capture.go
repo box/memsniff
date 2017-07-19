@@ -3,6 +3,7 @@
 package capture
 
 import (
+	"bytes"
 	"errors"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
@@ -16,7 +17,11 @@ const (
 )
 
 var (
-	ErrNoSource        = errors.New("must specify a network interface or file")
+	// ErrNoSource is returned when neither a network interface nor a file
+	// is specified to New.
+	ErrNoSource = errors.New("must specify a network interface or file")
+	// ErrAmbiguousSource is returned when both a network interface and a file
+	// are specified to New.
 	ErrAmbiguousSource = errors.New("cannot specify both network interface and file")
 )
 
@@ -101,13 +106,13 @@ func portFilter(ports []int) (string, error) {
 		return "", errors.New("need at least one port")
 	}
 
-	filterExpr := []byte("tcp src port " + strconv.Itoa(int(ports[0])))
+	var filterExpr bytes.Buffer
+	filterExpr.WriteString("tcp src port " + strconv.Itoa(ports[0]))
 	for _, port := range ports[1:] {
-		filterExpr = append(filterExpr,
-			[]byte(" or tcp src port "+strconv.Itoa(int(port)))...)
+		filterExpr.WriteString(" or tcp src port " + strconv.Itoa(port))
 	}
 
-	return string(filterExpr), nil
+	return filterExpr.String(), nil
 }
 
 func newLiveCapture(netInterface string, bufferSize int) (*pcap.Handle, error) {

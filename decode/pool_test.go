@@ -43,7 +43,7 @@ func TestSeparateGoroutine(t *testing.T) {
 
 	p := NewPool(testLogger{t}, 8, nil, handler)
 	w := <-p.readyQ
-	w.buf().Append(capture.PacketData{})
+	_ = w.buf().Append(capture.PacketData{})
 	w.work()
 	wg.Wait()
 }

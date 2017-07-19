@@ -5,14 +5,13 @@ import (
 	"sort"
 )
 
-const (
-	initialThreshold = 1
-)
-
+// Item instances are tracked by a Hotlist, possible based on the associated weight.
 type Item interface {
 	Weight() int
 }
 
+// HotList tracks the frequency of items added to it, discarding infrequent
+// items and potentially retaining items based on relative weights.
 type HotList interface {
 	AddWeighted(x Item)
 	AddNWeighted(x Item, n int)
@@ -20,6 +19,7 @@ type HotList interface {
 	Top(k int) []Entry
 }
 
+// Entry represents the number of times an Item has occurred.
 type Entry interface {
 	Item() Item
 	Count() int

@@ -70,7 +70,9 @@ func TestCorrectSize(t *testing.T) {
 		var pd PacketData
 		pd.Data = data
 		pd.Info.CaptureLength = len(data)
-		uut.Append(pd)
+		if err := uut.Append(pd); err != nil {
+			t.Error(err)
+		}
 	}
 
 	for i := 0; i < 10; i++ {

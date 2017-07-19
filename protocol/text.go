@@ -49,7 +49,7 @@ func readSingleText(d []byte) ([]byte, *GetResponse, error) {
 	if len(d) < 6 {
 		return nil, nil, errNoTextResponseFound
 	}
-	start := 0
+	var start int
 	if bytes.Equal(d[:6], textResponseStart) {
 		start = len(textResponseStart)
 	} else {
