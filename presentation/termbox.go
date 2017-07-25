@@ -83,7 +83,7 @@ func (u *uiContext) handleEvent(ev termbox.Event) error {
 		if ev.Ch == 'p' {
 			u.handlePause()
 		}
-		if ev.Ch == 'q' {
+		if ev.Ch == 'q' || ev.Key == termbox.KeyCtrlC {
 			return errQuitRequested
 		}
 		if ev.Key == termbox.KeyCtrlL {
