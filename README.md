@@ -10,10 +10,29 @@ Like its predecessors, memsniff listens to network traffic and identifies
 responses to `get` requests, and is usually run directly on a memcache server
 host.
 
+You can see our announcement
+[here](https://blog.box.com/blog/introducing-memsniff-robust-memcache-traffic-analyzer/).
+
 
 ## Installation
 
-Memsniff uses the standard golang toolchain, which makes installation simple.
+Before building you'll need to have the libpcap library and headers installed.
+
+On Redhat-based distributions:
+
+```shell
+# yum install libpcap-devel
+```
+
+Or on Debian-based distributions:
+
+```shell
+# apt-get update && apt-get install libpcap-dev
+```
+
+Memsniff uses the
+(standard golang toolchain](https://golang.org/doc/install),
+which makes installation simple.
 Once you have the toolchain installed and `$GOPATH` pointed to your working
 directory:
 
@@ -22,15 +41,25 @@ $ go get github.com/box/memsniff
 $ go build github.com/box/memsniff
 ```
 
-In typical Go fashion, you will find a single `memsniff`
-binary in your working directory, ready to be transferred to your Memcache
-hosts, or packaged in your distribution's preferred format.
+You will find a compiled binary at `$GOPATH/bin/memsniff`,
+ready to be transferred to your Memcache
+hosts or packaged in your distribution's preferred format.
 
 
 ## Usage
 
 On most operating systems `memsniff` requires superuser privileges to capture
 network traffic from an interface, which you specify with the `-i` option.
+
+```shell
+# memsniff -i eth0
+```
+
+See `-h` for more command-line options.  Once running a few more keys are
+active:
+
+* `p` - Pause the updating of the display. Press `p` again to resume.
+* `q` - Exit `memsniff`.
 
 
 ## Roadmap
