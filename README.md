@@ -31,7 +31,7 @@ Or on Debian-based distributions:
 ```
 
 Memsniff uses the
-(standard golang toolchain](https://golang.org/doc/install),
+[standard golang toolchain](https://golang.org/doc/install),
 which makes installation simple.
 Once you have the toolchain installed and `$GOPATH` pointed to your working
 directory:
