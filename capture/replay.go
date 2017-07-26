@@ -55,8 +55,9 @@ func (r *replayer) CollectPackets(pb *PacketBuffer) error {
 		r.dropExpired(elapsed)
 	}
 
+	l := r.buf.PacketLen()
 	writeUntil := r.first.Add(elapsed + replayerTimeout)
-	for ; r.cursor < r.buf.PacketLen(); r.cursor++ {
+	for ; r.cursor < l && pb.BytesRemaining() >= snapLen; r.cursor++ {
 		p := r.buf.Packet(r.cursor)
 		r.received++
 		if p.Info.Timestamp.After(writeUntil) {

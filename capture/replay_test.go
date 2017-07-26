@@ -55,7 +55,7 @@ func TestPacing(t *testing.T) {
 
 	uut := newReplayer(ts, 1000, 8*1024*1024)
 	uut.Logger = log.ConsoleLogger{}
-	buf := NewPacketBuffer(1000, 1)
+	buf := NewPacketBuffer(1000, 8*1024*1024)
 
 	err := uut.CollectPackets(buf)
 	n := buf.PacketLen()
@@ -86,7 +86,7 @@ func TestDrop(t *testing.T) {
 	ts.AddPacket(start.Add(delay), []byte{1})
 
 	uut := newReplayer(ts, 1000, 8*1024*1024)
-	buf := NewPacketBuffer(1000, 1)
+	buf := NewPacketBuffer(1000, 8*1024*1024)
 
 	err := uut.CollectPackets(buf)
 	n := buf.PacketLen()

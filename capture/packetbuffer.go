@@ -39,6 +39,11 @@ func (pb *PacketBuffer) bytesStored() int {
 	return pb.offsets[pb.numPackets-1]
 }
 
+// BytesRemaining returns the number of additional bytes this PacketBuffer can hold.
+func (pb *PacketBuffer) BytesRemaining() int {
+	return len(pb.data) - pb.bytesStored()
+}
+
 // Append adds a packet to the PacketBuffer.
 // Makes a copy of pd.Data, which may be modified after Append returns.
 // Returns ErrBytesFull or ErrPacketsFull if there is insufficient space.
