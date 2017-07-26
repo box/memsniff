@@ -90,3 +90,25 @@ func TestCorrectSize(t *testing.T) {
 		}
 	}
 }
+
+func TestBytesRemaining(t *testing.T) {
+	l := 100
+	uut := NewPacketBuffer(1, l)
+	if uut.BytesRemaining() != l {
+		t.Fail()
+	}
+	pd := PacketData{
+		Info: gopacket.CaptureInfo{
+			Length:        l,
+			CaptureLength: l,
+		},
+		Data: make([]byte, l),
+	}
+	err := uut.Append(pd)
+	if err != nil {
+		t.Error(err)
+	}
+	if uut.BytesRemaining() != 0 {
+		t.Fail()
+	}
+}
