@@ -118,6 +118,41 @@ func TestLotsOfData(t *testing.T) {
 	}
 }
 
+func TestReadN(t *testing.T) {
+	r := NewTCPReaderStream()
+	go func() {
+		r.Reassembled(reassemblyString("hello"))
+		r.Reassembled(reassemblyString("world"))
+		r.ReassemblyComplete()
+	}()
+
+	b, err := r.ReadN(3)
+	if err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(b, []byte("hel")) {
+		t.Error("expected hel got", string(b))
+	}
+
+	// now something that requires combining across
+	b, err = r.ReadN(4)
+	if err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(b, []byte("lowo")) {
+		t.Error("expected lowo got", string(b))
+	}
+
+	// run out of data?
+	b, err = r.ReadN(4)
+	if err != io.ErrUnexpectedEOF {
+		t.Error(err)
+	}
+	if !bytes.Equal(b, []byte("rld")) {
+		t.Error("expected rld got", string(b))
+	}
+}
+
 func TestReadLine(t *testing.T) {
 	testReadLine(t, []tcpassembly.Reassembly{
 		reassemblyString("hel")[0],
@@ -130,18 +165,43 @@ func TestReadLine(t *testing.T) {
 	testReadLine(t, reassemblyString("\n"), "", nil)
 }
 
-func TestReadLineMissing(t *testing.T) {
-	uut := NewTCPReaderStream()
-	uut.LossErrors = true
+func TestReadLineMultiple(t *testing.T) {
+	r := NewTCPReaderStream()
 	go func() {
-		uut.Reassembled([]tcpassembly.Reassembly{reassemblyWithSkip(5, "world")})
-		uut.ReassemblyComplete()
+		r.Reassembled(reassemblyString("hello\nworld\n"))
+		r.ReassemblyComplete()
 	}()
-	_, err := uut.ReadLine()
+
+	l, err := r.ReadLine()
+	if err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(l, []byte("hello")) {
+		t.Error("expected hello actual", string(l))
+	}
+
+	l, err = r.ReadLine()
+	if err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(l, []byte("world")) {
+		t.Error("expected world actual", string(l))
+	}
+
+}
+
+func TestReadLineMissing(t *testing.T) {
+	r := NewTCPReaderStream()
+	r.LossErrors = true
+	go func() {
+		r.Reassembled([]tcpassembly.Reassembly{reassemblyWithSkip(5, "world")})
+		r.ReassemblyComplete()
+	}()
+	_, err := r.ReadLine()
 	if err != (ErrLostData{5}) || !strings.Contains(err.Error(), "lost 5 bytes") {
 		t.Error("Expected ErrLostData but got", err)
 	}
-	l, err := uut.ReadLine()
+	l, err := r.ReadLine()
 	if !bytes.Equal(l, []byte("world")) {
 		t.Error("expected world but got", string(l))
 	}
@@ -180,35 +240,35 @@ func TestDiscard(t *testing.T) {
 		reassemblyString("1")[0],
 		reassemblyString("23")[0],
 		reassemblyString("hello\n")[0],
-	}, 3, "hello\n")
+	}, 3, "hello\n", false)
 
 	// split last block
 	testDiscard(t, []tcpassembly.Reassembly{
 		reassemblyString("1")[0],
 		reassemblyString("2")[0],
 		reassemblyString("3hello\n")[0],
-	}, 3, "hello\n")
+	}, 3, "hello\n", false)
 
 	// insufficient data
-	testDiscard(t, reassemblyString("12"), 2, "")
+	testDiscard(t, reassemblyString("12"), 2, "", true)
 
 	// empty
-	testDiscard(t, nil, 0, "")
+	testDiscard(t, nil, 0, "", true)
 }
 
 func TestDiscardMissingRecovery(t *testing.T) {
-	uut := NewTCPReaderStream()
-	uut.LossErrors = true
+	r := NewTCPReaderStream()
+	r.LossErrors = true
 	go func() {
-		uut.Reassembled([]tcpassembly.Reassembly{
+		r.Reassembled([]tcpassembly.Reassembly{
 			reassemblyWithSkip(3, "ab"),
 			reassemblyWithSkip(5, "world"),
 		})
-		uut.ReassemblyComplete()
+		r.ReassemblyComplete()
 	}()
-	uut.Discard(2)
-	uut.Discard(10)
-	l, err := uut.ReadLine()
+	r.Discard(2)
+	r.Discard(10)
+	l, err := r.ReadLine()
 	if err != nil {
 		t.Error("error from ReadLine", err)
 	}
@@ -217,14 +277,20 @@ func TestDiscardMissingRecovery(t *testing.T) {
 	}
 }
 
-func testDiscard(t *testing.T, input []tcpassembly.Reassembly, expectedN int, expectedOut string) {
+func testDiscard(t *testing.T, input []tcpassembly.Reassembly, expectedN int, expectedOut string, expectEOF bool) {
 	r := NewTCPReaderStream()
 	done := make(chan error, 1)
 	var out []byte
 	go func() {
 		n, err := r.Discard(3)
+		if err != io.EOF && expectEOF {
+			t.Error("input=", input, "got error:", err)
+		}
+		if err != nil && !expectEOF {
+			t.Error("input=", input, "got error:", err)
+		}
 		if n != expectedN {
-			t.Error("got", n, "expected 3")
+			t.Error("got", n, "expected", expectedN)
 		}
 		out, err = ioutil.ReadAll(r)
 		done <- err
@@ -243,13 +309,13 @@ func testDiscard(t *testing.T, input []tcpassembly.Reassembly, expectedN int, ex
 }
 
 func TestCloseAllowsWritesToProceed(t *testing.T) {
-	uut := NewTCPReaderStream()
-	uut.Close()
+	r := NewTCPReaderStream()
+	r.Close()
 	// all following data should now be discarded
 	for i := 0; i < 100000; i++ {
-		uut.Reassembled(reassemblyString("foobarbaz"))
+		r.Reassembled(reassemblyString("foobarbaz"))
 	}
-	uut.ReassemblyComplete()
+	r.ReassemblyComplete()
 }
 
 func TestReadAfterClosePanics(t *testing.T) {
@@ -258,32 +324,32 @@ func TestReadAfterClosePanics(t *testing.T) {
 			t.Fail()
 		}
 	}()
-	uut := NewTCPReaderStream()
-	uut.Close()
+	r := NewTCPReaderStream()
+	r.Close()
 	// expect panic
-	_, _ = uut.ReadLine()
+	_, _ = r.ReadLine()
 	t.Fail()
 }
 
 func TestCloseDuringFlush(t *testing.T) {
-	uut := NewTCPReaderStream()
+	r := NewTCPReaderStream()
 	done := make(chan bool)
 	// fill buffer
 	for i := 0; i < maxPackets; i++ {
-		uut.Reassembled(reassemblyString("\n"))
+		r.Reassembled(reassemblyString("\n"))
 	}
 	go func() {
 		// this should block until Close() is called
-		uut.Reassembled(reassemblyString("\n"))
-		uut.Reassembled(reassemblyString("\n"))
-		uut.ReassemblyComplete()
+		r.Reassembled(reassemblyString("\n"))
+		r.Reassembled(reassemblyString("\n"))
+		r.ReassemblyComplete()
 		done <- true
 	}()
 
 	// give goroutine a chance to get blocked
 	time.Sleep(time.Second)
 
-	uut.Close()
+	r.Close()
 
 	select {
 	case <-done:
@@ -298,9 +364,9 @@ type ReaderStream interface {
 }
 
 func BenchmarkManySmallPackets(b *testing.B) {
-	uut := NewTCPReaderStream()
+	r := NewTCPReaderStream()
 	for i := 0; i < b.N; i++ {
-		bench(uut, func() ReaderStream { return NewTCPReaderStream() })
+		bench(r, func() ReaderStream { return NewTCPReaderStream() })
 	}
 }
 
@@ -314,21 +380,21 @@ func BenchmarkStandardReader(b *testing.B) {
 	}
 }
 
-func bench(uut tcpassembly.Stream, factory func() ReaderStream) {
+func bench(r tcpassembly.Stream, factory func() ReaderStream) {
 	numStreams := 10000
 	numPackets := 5
 	var wg sync.WaitGroup
 	wg.Add(numStreams)
 	for g := 0; g < numStreams; g++ {
-		uut := factory()
+		r := factory()
 		go func() {
 			for i := 0; i < numPackets; i++ {
-				uut.Reassembled(reassembly(100))
+				r.Reassembled(reassembly(100))
 			}
-			uut.ReassemblyComplete()
+			r.ReassemblyComplete()
 		}()
 		go func() {
-			ioutil.ReadAll(uut)
+			ioutil.ReadAll(r)
 			wg.Done()
 		}()
 	}
