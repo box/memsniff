@@ -5,6 +5,18 @@ import (
 	"io"
 )
 
+// EventType described what sort of event has occurred.
+type EventType int
+
+const (
+	// EventUnknown is an unhandled event.
+	EventUnknown EventType = iota
+	// EventGetHit is a successful data retrieval that returned data.
+	EventGetHit
+	// EventGetMiss is a data retrieval that did not result in data.
+	EventGetMiss
+)
+
 // Reader represents a subset of the bufio.Reader interface.
 type Reader interface {
 	io.Reader
@@ -36,3 +48,26 @@ type ConsumerSource interface {
 	io.Closer
 	tcpassembly.Stream
 }
+
+// Consumer is a generic reader of a datastore conversation.
+type Consumer struct {
+	// Handler receives events derived from the conversation.
+	Handler EventHandler
+	// ClientReader exposes data sent by the client to the server.
+	ClientReader ConsumerSource
+	// ServerReader exposes data send by the server to the client.
+	ServerReader ConsumerSource
+}
+
+// Event is a single event in a datastore conversation
+type Event struct {
+	// Type of the event.
+	Type EventType
+	// Datastore key affected by this event.
+	Key string
+	// Size of the datastore value affected by this event.
+	Size int
+}
+
+// EventHandler consumes a single event.
+type EventHandler func(evt Event)
