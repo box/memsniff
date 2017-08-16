@@ -1,6 +1,7 @@
 package model
 
 import (
+	"github.com/box/memsniff/log"
 	"github.com/google/gopacket/tcpassembly"
 	"io"
 )
@@ -51,6 +52,8 @@ type ConsumerSource interface {
 
 // Consumer is a generic reader of a datastore conversation.
 type Consumer struct {
+	// A Logger instance for debugging.  No logging is done if nil.
+	Logger log.Logger
 	// Handler receives events derived from the conversation.
 	Handler EventHandler
 	// ClientReader exposes data sent by the client to the server.
