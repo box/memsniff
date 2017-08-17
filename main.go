@@ -10,6 +10,7 @@ import (
 	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/presentation"
 	"github.com/box/memsniff/protocol"
+	"github.com/box/memsniff/protocol/model"
 	flag "github.com/spf13/pflag"
 	"os"
 	"os/signal"
@@ -107,8 +108,8 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 		stats.PacketsDroppedParser = decodeStats.PacketsDropped
 
 		analysisStats := analysisPool.Stats()
-		stats.ResponsesParsed = analysisStats.ResponsesHandled
-		stats.PacketsDroppedAnalysis = analysisStats.ResponsesDropped
+		stats.ResponsesParsed = analysisStats.EventsHandled
+		stats.PacketsDroppedAnalysis = analysisStats.EventsDropped
 
 		stats.PacketsPassedFilter = stats.PacketsDroppedKernel + stats.PacketsCaptured
 		stats.PacketsDroppedTotal = stats.PacketsDroppedKernel + stats.PacketsDroppedParser + stats.PacketsDroppedAnalysis
@@ -119,14 +120,14 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 
 func packetHandler(analysisPool *analysis.Pool) func(dps []*decode.DecodedPacket) {
 	return func(dps []*decode.DecodedPacket) {
-		var allResponses []*protocol.GetResponse
+		var allEvents []model.Event
 		for _, dp := range dps {
 			if len(dp.Payload) > 0 {
 				// ignore err, just try to read what we can
-				responses, _ := protocol.Read(dp.Payload)
-				allResponses = append(allResponses, responses...)
+				events, _ := protocol.Read(dp.Payload)
+				allEvents = append(allEvents, events...)
 			}
 		}
-		analysisPool.HandleGetResponses(allResponses)
+		analysisPool.HandleEvents(allEvents)
 	}
 }

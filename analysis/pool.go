@@ -4,14 +4,15 @@ package analysis
 
 import (
 	"github.com/box/memsniff/log"
-	"github.com/box/memsniff/protocol"
+	"github.com/box/memsniff/protocol/model"
 	"hash/fnv"
 )
 
-// Pool tracks cache activity by hashing inputs to fixed workers.  The number
-// of workers is determined when the Pool is created.  The implementation
-// prioritizes responsiveness over consistency, and data is dropped if the
-// rate of input is too high to be handled by the Pool.
+// Pool tracks datastore activity by hashing inputs to fixed workers.
+// The number of workers is determined when the Pool is created.
+// The implementation prioritizes responsiveness over consistency,
+// and data is dropped if the rate of input is too high to be handled
+// by the Pool.
 type Pool struct {
 	// A Logger instance for debugging.  No logging is done if nil.
 	Logger     log.Logger
@@ -23,10 +24,10 @@ type Pool struct {
 
 // Stats contains performance metrics for a Pool.
 type Stats struct {
-	// number of responses sent to HandleGetResponses that were recorded
-	ResponsesHandled int
-	// number of responses sent to HandleGetResponses that were discarded
-	ResponsesDropped int
+	// number of events sent to HandleEvents that were recorded
+	EventsHandled int
+	// number of events sent to HandleEvents that were discarded
+	EventsDropped int
 }
 
 // New returns a new Pool.
@@ -49,38 +50,38 @@ func New(numWorkers, reportSize int) *Pool {
 	return c
 }
 
-// HandleGetResponses adds records for a set of cache GET operation to the Pool.
+// HandleEvents adds records for a set of datastore operations to the Pool.
 //
-// The GetResponses will be dispatched to its assigned worker.  If the worker
+// The events will be dispatched to its assigned worker.  If the worker
 // is overloaded, all inputs for that worker  will be discarded and statistics
 // for this Pool updated to reflect the lost data.
 //
-// HandleGetResponse is threadsafe.
-func (p *Pool) HandleGetResponses(rs []*protocol.GetResponse) {
-	perWorkerResponses := p.partitionResponses(p.filter.filterResponses(rs))
-	for i, responses := range perWorkerResponses {
-		if len(responses) > 0 {
-			err := p.workers[i].handleGetResponses(responses)
+// HandleEvents is threadsafe.
+func (p *Pool) HandleEvents(evts []model.Event) {
+	perWorkerEvents := p.partitionEvents(p.filter.filterEvents(evts))
+	for i, events := range perWorkerEvents {
+		if len(events) > 0 {
+			err := p.workers[i].handleEvents(events)
 			if err == errQueueFull {
-				p.stats.ResponsesDropped += len(responses)
+				p.stats.EventsDropped += len(events)
 				continue
 			}
-			p.stats.ResponsesHandled += len(responses)
+			p.stats.EventsHandled += len(events)
 		}
 	}
 }
 
-func (p *Pool) partitionResponses(rs []*protocol.GetResponse) [][]*protocol.GetResponse {
-	perWorkerResponses := make([][]*protocol.GetResponse, len(p.workers))
+func (p *Pool) partitionEvents(rs []model.Event) [][]model.Event {
+	perWorkerEvents := make([][]model.Event, len(p.workers))
 	for _, r := range rs {
 		slot := p.keySlot(r.Key)
-		perWorkerResponses[slot] = append(perWorkerResponses[slot], r)
+		perWorkerEvents[slot] = append(perWorkerEvents[slot], r)
 	}
-	return perWorkerResponses
+	return perWorkerEvents
 }
 
 // SetFilterPattern sets an RE2 pattern for future data points.  Only operations
-// on cache keys matching pattern will have statistics collected.  Setting a
+// on keys matching pattern will have statistics collected.  Setting a
 // new filter invalidates existing results, so current statistics are cleared
 // before returning.  If pattern is the empty string statistics are collected
 // for all keys.
@@ -110,14 +111,10 @@ func (p *Pool) Stats() Stats {
 	return p.stats
 }
 
-func (p *Pool) getWorker(key []byte) worker {
-	return p.workers[p.keySlot(key)]
-}
-
-func (p *Pool) keySlot(key []byte) int {
+func (p *Pool) keySlot(key string) int {
 	hash := fnv.New64a()
 	// writing to a Hash can never fail
-	_, _ = hash.Write(key)
+	_, _ = hash.Write([]byte(key))
 	h := hash.Sum64() % uint64(len(p.workers))
 	return int(h)
 }

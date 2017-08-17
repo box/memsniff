@@ -3,6 +3,7 @@ package protocol
 
 import (
 	"errors"
+	"github.com/box/memsniff/protocol/model"
 )
 
 // GetResponse summarizes a single cache value response to a get request.
@@ -26,6 +27,6 @@ func newMCError(msg string, isResumable bool) error {
 }
 
 // Read parses a block of memcached response stream data.
-func Read(d []byte) ([]*GetResponse, error) {
+func Read(d []byte) ([]model.Event, error) {
 	return readText(d)
 }

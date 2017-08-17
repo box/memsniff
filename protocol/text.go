@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"github.com/box/memsniff/protocol/model"
 	"strconv"
 )
 
@@ -19,17 +20,17 @@ var (
 // readText searches d for memcached text protocol VALUE responses.
 // It returns the empty slice (i.e. nil) as well as a nil error if no VALUE
 // response headers are found in the input.
-func readText(d []byte) ([]*GetResponse, error) {
-	var responses []*GetResponse
+func readText(d []byte) ([]model.Event, error) {
+	var events []model.Event
 	for {
-		rem, resp, err := readSingleText(d)
+		rem, evt, err := readSingleText(d)
 		if err == errNoTextResponseFound {
-			return responses, nil
+			return events, nil
 		}
 		if err != nil {
-			return responses, err
+			return events, err
 		}
-		responses = append(responses, resp)
+		events = append(events, evt)
 		d = rem
 	}
 }
@@ -45,9 +46,9 @@ func readText(d []byte) ([]*GetResponse, error) {
 // readSingleText uses a heuristic to find a response header.  If d begins
 // within the body of a VALUE response and that response includes content that
 // resembles a VALUE header, readSingleText may return incorrect results.
-func readSingleText(d []byte) ([]byte, *GetResponse, error) {
+func readSingleText(d []byte) ([]byte, model.Event, error) {
 	if len(d) < 6 {
-		return nil, nil, errNoTextResponseFound
+		return nil, model.Event{}, errNoTextResponseFound
 	}
 	var start int
 	if bytes.Equal(d[:6], textResponseStart) {
@@ -59,30 +60,31 @@ func readSingleText(d []byte) ([]byte, *GetResponse, error) {
 		}
 	}
 	if start < 0 {
-		return nil, nil, errNoTextResponseFound
+		return nil, model.Event{}, errNoTextResponseFound
 	}
 
 	d = d[start:]
 
 	endOfFirstLine := bytes.Index(d, crlf)
 	if endOfFirstLine < 0 {
-		return nil, nil, errNoTextResponseFound
+		return nil, model.Event{}, errNoTextResponseFound
 	}
 
 	// VALUE <key> <flags> <size> [<cas>]\r\n
 	//       ^-- d[0]                    ^-- d[endOfFirstLine]
 	fields := bytes.SplitN(d[:endOfFirstLine], []byte(" "), 4)
 	if len(fields) < 3 {
-		return nil, nil, errTextProtocolError
+		return nil, model.Event{}, errTextProtocolError
 	}
 
 	size, err := strconv.Atoi(string(fields[2]))
 	if err != nil {
-		return nil, nil, errTextProtocolError
+		return nil, model.Event{}, errTextProtocolError
 	}
 
-	resp := &GetResponse{
-		Key:  fields[0],
+	evt := model.Event{
+		Type: model.EventGetHit,
+		Key:  string(fields[0]),
 		Size: size,
 	}
 
@@ -93,5 +95,5 @@ func readSingleText(d []byte) ([]byte, *GetResponse, error) {
 		endOfBody = len(d)
 	}
 
-	return d[endOfBody:], resp, nil
+	return d[endOfBody:], evt, nil
 }
