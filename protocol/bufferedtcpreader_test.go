@@ -231,7 +231,6 @@ func testReadLine(t *testing.T, input []tcpassembly.Reassembly, expected string,
 	if !bytes.Equal(out, []byte(expected)) {
 		t.Error("expected", expected, "but got", string(out), "(", out, ")")
 	}
-	t.Log("input", input, "gave correct output", expected)
 }
 
 func TestDiscard(t *testing.T) {
@@ -347,14 +346,43 @@ func TestCloseDuringFlush(t *testing.T) {
 	}()
 
 	// give goroutine a chance to get blocked
-	time.Sleep(time.Second)
+	select {
+	case <-done:
+		t.Error("goroutine did not block as expected")
+	case <-time.After(10 * time.Millisecond):
+	}
 
 	r.Close()
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Millisecond):
 		t.Error("ReassemblyComplete did not return")
+	}
+}
+
+func TestPartnerFlush(t *testing.T) {
+	s1, s2 := NewStreamPair()
+	pushDone := make(chan struct{}, 1)
+	go func() {
+		s2.Reassembled(reassemblyString("2\r\n"))
+		for i := 0; i < maxPackets*2; i++ {
+			s1.Reassembled(reassemblyString("1\r\n"))
+		}
+		pushDone <- struct{}{}
+	}()
+
+	go func() {
+		// cannot proceed until s2 is flushed, which happens when s1 fills its buffer
+		s2.ReadLine()
+		// this read allows s1 to be flushed, which allows the writes to complete
+		s1.ReadLine()
+	}()
+
+	select {
+	case <-pushDone:
+	case <-time.After(time.Second):
+		t.Error("timed out")
 	}
 }
 

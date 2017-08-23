@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	maxPackets = 1000
-	maxBytes   = 4 * 1024
+	maxPackets = 100
+	maxBytes   = 8 * 1024
 )
 
 var (
@@ -90,7 +90,18 @@ type TCPReaderStream struct {
 	eof        bool
 	closed     bool
 
+	partner *TCPReaderStream
+
 	LossErrors bool
+}
+
+// NewStreamPair creates an associated pair of TCPReaderStreams.
+func NewStreamPair() (client, server *TCPReaderStream) {
+	client = NewTCPReaderStream()
+	server = NewTCPReaderStream()
+	client.partner = server
+	server.partner = client
+	return
 }
 
 // NewTCPReaderStream creates a new TCPReaderStream.
@@ -140,10 +151,47 @@ func (r *TCPReaderStream) ReassemblyComplete() {
 }
 
 func (r *TCPReaderStream) flush() {
-	// wait for read side to be done
+	if r.partner != nil {
+		// try to make sure it is possible for blockingFlush to complete if
+		// the consumer of this Reader is waiting for data from our partner.
+		r.partner.nonblockingFlush()
+	}
+	r.blockingFlush()
+}
+
+// nonblockingFlush sends any buffered data to the read side, but only if
+// the read side is done with its batch and ready to receive additional data
+// immediately.
+//
+// Returns true if any data was sent to the read side.
+func (r *TCPReaderStream) nonblockingFlush() bool {
+	if r.writeBatch.bytes.BlockLen() == 0 {
+		return false
+	}
+	select {
+	case <-r.done:
+		r.swap()
+		return true
+	default:
+		return false
+	}
+}
+
+// blockingFlush sends any buffered data to the read side, and does not return until
+// the data is received.
+func (r *TCPReaderStream) blockingFlush() {
+	if r.writeBatch.bytes.BlockLen() == 0 {
+		return
+	}
 	<-r.done
+	r.swap()
+}
+
+// swap exposes writeBatch to the reader, and reclaims readBatch as the new
+// area to write data.  It must only be called after receiving a signal on the done channel.
+func (r *TCPReaderStream) swap() {
 	r.writeBatch, r.readBatch = r.readBatch, r.writeBatch
-	// allow read side to proceed
+	// tell read side to proceed
 	r.ready <- struct{}{}
 	r.writeBatch.clear()
 }

@@ -84,7 +84,7 @@ func (b *BlockBuffer) Append(data []byte) error {
 // PacketBuffer stores captured packets in a compact format.
 type PacketBuffer struct {
 	BlockBuffer
-	cis         []gopacket.CaptureInfo
+	cis []gopacket.CaptureInfo
 }
 
 // NewPacketBuffer creates a PacketBuffer with the specified limits.
