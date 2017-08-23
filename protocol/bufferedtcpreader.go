@@ -263,13 +263,23 @@ func (r *TCPReaderStream) ReadLine() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if r.current.Skip != 0 && r.LossErrors {
 		err := ErrLostData{r.current.Skip}
 		r.current.Skip = 0
 		return nil, err
 	}
+
+	var pos int
+	// see if we can satisfy without copying
+	if pos = bytes.IndexByte(r.current.Bytes, '\n'); pos >= 0 {
+		out := trimCR(r.current.Bytes[:pos])
+		r.current.Bytes = r.current.Bytes[pos+1:]
+		return out, nil
+	}
+
+	// need to accumulate
 	r.buf.Reset()
-	pos := -1
 	for pos < 0 {
 		if pos = bytes.IndexByte(r.current.Bytes, '\n'); pos < 0 {
 			r.buf.Write(r.current.Bytes)
@@ -279,13 +289,16 @@ func (r *TCPReaderStream) ReadLine() ([]byte, error) {
 			}
 		}
 	}
-	if pos > 0 && r.current.Bytes[pos-1] == '\r' {
-		r.buf.Write(r.current.Bytes[:pos-1])
-	} else {
-		r.buf.Write(r.current.Bytes[:pos])
-	}
+	r.buf.Write(trimCR(r.current.Bytes[:pos]))
 	r.current.Bytes = r.current.Bytes[pos+1:]
 	return r.buf.Bytes(), nil
+}
+
+func trimCR(in []byte) []byte {
+	if len(in) > 0 && in[len(in)-1] == '\r' {
+		return in[:len(in)-1]
+	}
+	return in
 }
 
 // Discard skips the next n bytes, returning the number of bytes discarded.
@@ -331,6 +344,7 @@ func (r *TCPReaderStream) Close() error {
 	r.closed = true
 	close(r.done)
 	r.current = nil
+	r.buf.Reset()
 	bufferPool.Put(r.buf)
 	r.buf = nil
 	return nil
