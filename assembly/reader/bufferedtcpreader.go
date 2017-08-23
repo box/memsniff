@@ -1,4 +1,4 @@
-package protocol
+package reader
 
 import (
 	"bytes"
@@ -15,12 +15,8 @@ const (
 )
 
 var (
-	reassemblyQueuePool = sync.Pool{
-		New: func() interface{} { return newReassemblyQueue() },
-	}
-	bufferPool = sync.Pool{
-		New: func() interface{} { return new(bytes.Buffer) },
-	}
+	reassemblyQueuePool = sync.Pool{New: func() interface{} { return newReassemblyQueue() }}
+	bufferPool          = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
 )
 
 type reassemblyQueue struct {
@@ -96,16 +92,16 @@ type TCPReaderStream struct {
 }
 
 // NewStreamPair creates an associated pair of TCPReaderStreams.
-func NewStreamPair() (client, server *TCPReaderStream) {
-	client = NewTCPReaderStream()
-	server = NewTCPReaderStream()
+func NewPair() (client, server *TCPReaderStream) {
+	client = New()
+	server = New()
 	client.partner = server
 	server.partner = client
 	return
 }
 
 // NewTCPReaderStream creates a new TCPReaderStream.
-func NewTCPReaderStream() *TCPReaderStream {
+func New() *TCPReaderStream {
 	r := &TCPReaderStream{
 		writeBatch: reassemblyQueuePool.Get().(*reassemblyQueue),
 		readBatch:  reassemblyQueuePool.Get().(*reassemblyQueue),

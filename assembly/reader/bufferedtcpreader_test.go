@@ -1,4 +1,4 @@
-package protocol
+package reader
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 )
 
 func TestSmallPackets(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	var out []byte
 	var err error
 	done := make(chan struct{}, 1)
@@ -39,7 +39,7 @@ func TestSmallPackets(t *testing.T) {
 }
 
 func TestReadEmpty(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	done := make(chan error, 1)
 	go func() {
 		_, err := ioutil.ReadAll(r)
@@ -53,7 +53,7 @@ func TestReadEmpty(t *testing.T) {
 }
 
 func TestReadMissing(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	r.LossErrors = true
 	reassembly := []tcpassembly.Reassembly{
 		reassemblyWithSkip(-1, "hello"),
@@ -93,7 +93,7 @@ func TestReadMissing(t *testing.T) {
 }
 
 func TestLotsOfData(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	var out []byte
 	done := make(chan error, 1)
 	go func() {
@@ -119,7 +119,7 @@ func TestLotsOfData(t *testing.T) {
 }
 
 func TestReadN(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	go func() {
 		r.Reassembled(reassemblyString("hello"))
 		r.Reassembled(reassemblyString("world"))
@@ -166,7 +166,7 @@ func TestReadLine(t *testing.T) {
 }
 
 func TestReadLineMultiple(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	go func() {
 		r.Reassembled(reassemblyString("hello\nworld\n"))
 		r.ReassemblyComplete()
@@ -191,7 +191,7 @@ func TestReadLineMultiple(t *testing.T) {
 }
 
 func TestReadLineMissing(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	r.LossErrors = true
 	go func() {
 		r.Reassembled([]tcpassembly.Reassembly{reassemblyWithSkip(5, "world")})
@@ -211,7 +211,7 @@ func TestReadLineMissing(t *testing.T) {
 }
 
 func testReadLine(t *testing.T, input []tcpassembly.Reassembly, expected string, expectedErr error) {
-	r := NewTCPReaderStream()
+	r := New()
 	done := make(chan error, 1)
 	var out []byte
 	go func() {
@@ -256,7 +256,7 @@ func TestDiscard(t *testing.T) {
 }
 
 func TestDiscardMissingRecovery(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	r.LossErrors = true
 	go func() {
 		r.Reassembled([]tcpassembly.Reassembly{
@@ -277,7 +277,7 @@ func TestDiscardMissingRecovery(t *testing.T) {
 }
 
 func testDiscard(t *testing.T, input []tcpassembly.Reassembly, expectedN int, expectedOut string, expectEOF bool) {
-	r := NewTCPReaderStream()
+	r := New()
 	done := make(chan error, 1)
 	var out []byte
 	go func() {
@@ -308,7 +308,7 @@ func testDiscard(t *testing.T, input []tcpassembly.Reassembly, expectedN int, ex
 }
 
 func TestCloseAllowsWritesToProceed(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	r.Close()
 	// all following data should now be discarded
 	for i := 0; i < 100000; i++ {
@@ -323,7 +323,7 @@ func TestReadAfterClosePanics(t *testing.T) {
 			t.Fail()
 		}
 	}()
-	r := NewTCPReaderStream()
+	r := New()
 	r.Close()
 	// expect panic
 	_, _ = r.ReadLine()
@@ -331,7 +331,7 @@ func TestReadAfterClosePanics(t *testing.T) {
 }
 
 func TestCloseDuringFlush(t *testing.T) {
-	r := NewTCPReaderStream()
+	r := New()
 	done := make(chan bool)
 	// fill buffer
 	for i := 0; i < maxPackets; i++ {
@@ -362,7 +362,7 @@ func TestCloseDuringFlush(t *testing.T) {
 }
 
 func TestPartnerFlush(t *testing.T) {
-	s1, s2 := NewStreamPair()
+	s1, s2 := NewPair()
 	pushDone := make(chan struct{}, 1)
 	go func() {
 		s2.Reassembled(reassemblyString("2\r\n"))
@@ -392,23 +392,21 @@ type ReaderStream interface {
 }
 
 func BenchmarkManySmallPackets(b *testing.B) {
-	r := NewTCPReaderStream()
 	for i := 0; i < b.N; i++ {
-		bench(r, func() ReaderStream { return NewTCPReaderStream() })
+		bench(func() ReaderStream { return New() })
 	}
 }
 
 func BenchmarkStandardReader(b *testing.B) {
-	rs := tcpreader.NewReaderStream()
 	for i := 0; i < b.N; i++ {
-		bench(&rs, func() ReaderStream {
+		bench(func() ReaderStream {
 			rs := tcpreader.NewReaderStream()
 			return &rs
 		})
 	}
 }
 
-func bench(r tcpassembly.Stream, factory func() ReaderStream) {
+func bench(factory func() ReaderStream) {
 	numStreams := 10000
 	numPackets := 5
 	var wg sync.WaitGroup
