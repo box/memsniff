@@ -162,12 +162,11 @@ func (r *TCPReaderStream) releaseQueues() {
 // If EOF is encountered, n will be less than len(p).
 // At EOF, the count will be zero and err will be io.EOF.
 func (r *TCPReaderStream) Read(p []byte) (n int, err error) {
-	if r.current == nil {
-		err = r.nextAssembly()
-		if err != nil {
-			return
-		}
+	err = r.ensureCurrent()
+	if err != nil {
+		return
 	}
+
 	if r.current.Skip != 0 && r.LossErrors {
 		err = ErrLostData{r.current.Skip}
 		r.current.Skip = 0
@@ -195,12 +194,11 @@ func (r *TCPReaderStream) Read(p []byte) (n int, err error) {
 //
 // The returned buffer is only valid until the next call to ReadN, ReadLine or Close.
 func (r *TCPReaderStream) ReadN(n int) ([]byte, error) {
-	if r.current == nil {
-		err := r.nextAssembly()
-		if err != nil {
-			return nil, err
-		}
+	err := r.ensureCurrent()
+	if err != nil {
+		return nil, err
 	}
+
 	if r.current.Skip != 0 && r.LossErrors {
 		err := ErrLostData{r.current.Skip}
 		r.current.Skip = 0
@@ -238,12 +236,11 @@ func (r *TCPReaderStream) ReadN(n int) ([]byte, error) {
 // Peek will not advance past lost data, and will repeatedly
 // return ErrLostData until a Read, ReadN, or ReadLine operation.
 func (r *TCPReaderStream) Peek(n int) ([]byte, error) {
-	if r.current == nil {
-		err := r.nextAssembly()
-		if err != nil {
-			return nil, err
-		}
+	err := r.ensureCurrent()
+	if err != nil {
+		return nil, err
 	}
+
 	if r.current.Skip != 0 && r.LossErrors {
 		err := ErrLostData{r.current.Skip}
 		return nil, err
@@ -262,11 +259,9 @@ func (r *TCPReaderStream) Peek(n int) ([]byte, error) {
 // The text returned from ReadLine does not include the line end ("\r\n" or "\n").
 // No indication or error is given if the input ends without a final line end.
 func (r *TCPReaderStream) ReadLine() ([]byte, error) {
-	if r.current == nil {
-		err := r.nextAssembly()
-		if err != nil {
-			return nil, err
-		}
+	err := r.ensureCurrent()
+	if err != nil {
+		return nil, err
 	}
 	if r.current.Skip != 0 && r.LossErrors {
 		err := ErrLostData{r.current.Skip}
@@ -297,12 +292,15 @@ func (r *TCPReaderStream) ReadLine() ([]byte, error) {
 //
 // If Discard skips fewer than n bytes, it also returns an error.
 func (r *TCPReaderStream) Discard(n int) (discarded int, err error) {
-	if r.current == nil {
-		err = r.nextAssembly()
-		if err != nil {
-			return
-		}
+	if n <= 0 {
+		return
 	}
+
+	err = r.ensureCurrent()
+	if err != nil {
+		return
+	}
+
 	for toSkip := n; toSkip > 0; {
 		if r.current.Skip >= toSkip {
 			r.current.Skip -= toSkip
@@ -336,6 +334,13 @@ func (r *TCPReaderStream) Close() error {
 	bufferPool.Put(r.buf)
 	r.buf = nil
 	return nil
+}
+
+func (r *TCPReaderStream) ensureCurrent() (err error) {
+	if r.current != nil && (r.current.Skip > 0 || len(r.current.Bytes) > 0) {
+		return nil
+	}
+	return r.nextAssembly()
 }
 
 func (r *TCPReaderStream) nextAssembly() (err error) {
