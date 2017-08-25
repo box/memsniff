@@ -107,9 +107,9 @@ func portFilter(ports []int) (string, error) {
 	}
 
 	var filterExpr bytes.Buffer
-	filterExpr.WriteString("tcp src port " + strconv.Itoa(ports[0]))
+	filterExpr.WriteString("tcp port " + strconv.Itoa(ports[0]))
 	for _, port := range ports[1:] {
-		filterExpr.WriteString(" or tcp src port " + strconv.Itoa(port))
+		filterExpr.WriteString(" or tcp port " + strconv.Itoa(port))
 	}
 
 	return filterExpr.String(), nil

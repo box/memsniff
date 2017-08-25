@@ -5,12 +5,11 @@ package main
 import (
 	"fmt"
 	"github.com/box/memsniff/analysis"
+	"github.com/box/memsniff/assembly"
 	"github.com/box/memsniff/capture"
 	"github.com/box/memsniff/decode"
 	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/presentation"
-	"github.com/box/memsniff/protocol"
-	"github.com/box/memsniff/protocol/model"
 	flag "github.com/spf13/pflag"
 	"os"
 	"os/signal"
@@ -119,15 +118,11 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 }
 
 func packetHandler(analysisPool *analysis.Pool) func(dps []*decode.DecodedPacket) {
+	w := assembly.NewWorker(logger, analysisPool, *ports)
 	return func(dps []*decode.DecodedPacket) {
-		var allEvents []model.Event
-		for _, dp := range dps {
-			if len(dp.Payload) > 0 {
-				// ignore err, just try to read what we can
-				events, _ := protocol.Read(dp.Payload)
-				allEvents = append(allEvents, events...)
-			}
+		err := w.HandlePackets(dps)
+		if err != nil {
+			logger.Log(err)
 		}
-		analysisPool.HandleEvents(allEvents)
 	}
 }
