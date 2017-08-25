@@ -83,15 +83,14 @@ func (dp *DecodedPacket) decode(d *decoder, ci gopacket.CaptureInfo, data []byte
 		d.logger.Log("Found truncated packet of length", ci.Length)
 		d.largestPacket = ci.Length
 	}
-	var netFlow gopacket.Flow
 	for _, layer := range dp.decoded {
 		switch layer {
 		case layers.LayerTypeIPv4:
-			netFlow = dp.ipv4.NetworkFlow()
+			dp.NetFlow = dp.ipv4.NetworkFlow()
 		case layers.LayerTypeIPv6:
-			netFlow = dp.ipv6.NetworkFlow()
+			dp.NetFlow = dp.ipv6.NetworkFlow()
 		case layers.LayerTypeTCP:
-			dp.FlowHash = hashCombine(netFlow.FastHash(), dp.TCP.TransportFlow().FastHash())
+			dp.FlowHash = hashCombine(dp.NetFlow.FastHash(), dp.TCP.TransportFlow().FastHash())
 		default:
 		}
 	}
