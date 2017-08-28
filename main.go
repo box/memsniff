@@ -107,8 +107,8 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 		stats.PacketsDroppedParser = decodeStats.PacketsDropped
 
 		analysisStats := analysisPool.Stats()
-		stats.ResponsesParsed = analysisStats.EventsHandled
-		stats.PacketsDroppedAnalysis = analysisStats.EventsDropped
+		stats.ResponsesParsed = int(analysisStats.EventsHandled)
+		stats.PacketsDroppedAnalysis = int(analysisStats.EventsDropped)
 
 		stats.PacketsPassedFilter = stats.PacketsDroppedKernel + stats.PacketsCaptured
 		stats.PacketsDroppedTotal = stats.PacketsDroppedKernel + stats.PacketsDroppedParser + stats.PacketsDroppedAnalysis

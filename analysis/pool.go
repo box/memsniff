@@ -6,6 +6,7 @@ import (
 	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/protocol/model"
 	"hash/fnv"
+	"sync/atomic"
 )
 
 // Pool tracks datastore activity by hashing inputs to fixed workers.
@@ -25,9 +26,18 @@ type Pool struct {
 // Stats contains performance metrics for a Pool.
 type Stats struct {
 	// number of events sent to HandleEvents that were recorded
-	EventsHandled int
+	EventsHandled int64
 	// number of events sent to HandleEvents that were discarded
-	EventsDropped int
+	EventsDropped int64
+}
+
+func (s *Stats) addHandled(n int) {
+	atomic.AddInt64(&s.EventsHandled, int64(n))
+}
+
+func (s *Stats) addDropped(n int) {
+	atomic.AddInt64(&s.EventsDropped, int64(n))
+
 }
 
 // New returns a new Pool.
@@ -63,10 +73,10 @@ func (p *Pool) HandleEvents(evts []model.Event) {
 		if len(events) > 0 {
 			err := p.workers[i].handleEvents(events)
 			if err == errQueueFull {
-				p.stats.EventsDropped += len(events)
+				p.stats.addDropped(len(events))
 				continue
 			}
-			p.stats.EventsHandled += len(events)
+			p.stats.addHandled(len(events))
 		}
 	}
 }
