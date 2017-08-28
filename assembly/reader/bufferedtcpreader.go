@@ -77,16 +77,21 @@ func (e ErrLostData) Error() string {
 
 // TCPReaderStream implements tcpassembly.Stream and model.Reader
 type TCPReaderStream struct {
-	writeBatch *reassemblyQueue
-	readBatch  *reassemblyQueue
-	ready      chan struct{}
-	done       chan struct{}
-	current    *tcpassembly.Reassembly
-	buf        *bytes.Buffer
-	eof        bool
-	closed     bool
-
 	partner *TCPReaderStream
+
+	// will be nil if we have already sent EOF
+	writeBatch *reassemblyQueue
+	// will receive nil after the final reassemblyQueue to indicate EOF
+	filled     chan *reassemblyQueue
+
+	// owned by reader side
+	readBatch  *reassemblyQueue
+	// partially consumed Reassembly
+	current    *tcpassembly.Reassembly
+	// buf accumulates blocks that extends over multiple Reassemblies in ReadN and ReadLine
+	buf        *bytes.Buffer
+	seenEof    bool
+	closed     bool
 
 	LossErrors bool
 }
@@ -104,9 +109,7 @@ func NewPair() (client, server *TCPReaderStream) {
 func New() *TCPReaderStream {
 	r := &TCPReaderStream{
 		writeBatch: reassemblyQueuePool.Get().(*reassemblyQueue),
-		readBatch:  reassemblyQueuePool.Get().(*reassemblyQueue),
-		ready:      make(chan struct{}, 1),
-		done:       make(chan struct{}, 1),
+		filled:     make(chan *reassemblyQueue, 2),
 		buf:        bufferPool.Get().(*bytes.Buffer),
 	}
 	return r
@@ -117,11 +120,14 @@ func New() *TCPReaderStream {
 // is falling behind.
 func (r *TCPReaderStream) Reassembled(reassembly []tcpassembly.Reassembly) {
 	if r.closed {
+		if !r.sentEOF() {
+			r.sendEOF()
+		}
 		return
 	}
 	numAdded := r.writeBatch.add(reassembly)
 	for numAdded < len(reassembly) {
-		r.flush()
+		r.flushBoth()
 		if r.closed {
 			return
 		}
@@ -131,74 +137,42 @@ func (r *TCPReaderStream) Reassembled(reassembly []tcpassembly.Reassembly) {
 
 // ReassemblyComplete sends any buffered stream data to the reader.
 func (r *TCPReaderStream) ReassemblyComplete() {
-	if r.closed {
-		r.releaseQueues()
-		return
+	if !r.closed {
+		// send last batch to reader
+		r.flushBoth()
 	}
-	// send last batch to reader
-	r.flush()
-	go func() {
-		// wait for reader to be done with last batch
-		<-r.done
-		// tell reader there will be no more batches
-		close(r.ready)
-		r.releaseQueues()
-	}()
-}
-
-func (r *TCPReaderStream) flush() {
-	if r.partner != nil {
-		// try to make sure it is possible for blockingFlush to complete if
-		// the consumer of this Reader is waiting for data from our partner.
-		r.partner.nonblockingFlush()
-	}
-	r.blockingFlush()
-}
-
-// nonblockingFlush sends any buffered data to the read side, but only if
-// the read side is done with its batch and ready to receive additional data
-// immediately.
-//
-// Returns true if any data was sent to the read side.
-func (r *TCPReaderStream) nonblockingFlush() bool {
-	if r.writeBatch.bytes.BlockLen() == 0 {
-		return false
-	}
-	select {
-	case <-r.done:
-		r.swap()
-		return true
-	default:
-		return false
+	if !r.sentEOF() {
+		r.sendEOF()
 	}
 }
 
-// blockingFlush sends any buffered data to the read side, and does not return until
-// the data is received.
-func (r *TCPReaderStream) blockingFlush() {
-	if r.writeBatch.bytes.BlockLen() == 0 {
-		return
-	}
-	<-r.done
-	r.swap()
+func (r *TCPReaderStream) sentEOF() bool {
+	return r.writeBatch == nil
 }
 
-// swap exposes writeBatch to the reader, and reclaims readBatch as the new
-// area to write data.  It must only be called after receiving a signal on the done channel.
-func (r *TCPReaderStream) swap() {
-	r.writeBatch, r.readBatch = r.readBatch, r.writeBatch
-	// tell read side to proceed
-	r.ready <- struct{}{}
-	r.writeBatch.clear()
-}
-
-func (r *TCPReaderStream) releaseQueues() {
-	r.readBatch.clear()
-	reassemblyQueuePool.Put(r.readBatch)
-	r.readBatch = nil
+func (r *TCPReaderStream) sendEOF() {
 	r.writeBatch.clear()
 	reassemblyQueuePool.Put(r.writeBatch)
 	r.writeBatch = nil
+	r.filled <- r.writeBatch
+}
+
+func (r *TCPReaderStream) flushBoth() {
+	if r.partner != nil {
+		// try to make sure it is possible for flush to complete if
+		// the consumer of this reader is waiting for data from our partner.
+		r.partner.flush()
+	}
+	r.flush()
+}
+
+// flush sends any buffered data to the reader side.
+func (r *TCPReaderStream) flush() {
+	if r.sentEOF() || r.writeBatch.bytes.BlockLen() == 0 {
+		return
+	}
+	r.filled <- r.writeBatch
+	r.writeBatch = reassemblyQueuePool.Get().(*reassemblyQueue)
 }
 
 // Read attempts to read sufficient data to fill p.
@@ -221,7 +195,7 @@ func (r *TCPReaderStream) Read(p []byte) (n int, err error) {
 		n += numBytes
 		r.current.Bytes = r.current.Bytes[numBytes:]
 		if len(r.current.Bytes) == 0 {
-			err = r.nextAssembly()
+			err = r.nextReassembly()
 			if err != nil {
 				r.current = nil
 				return n, nil
@@ -261,7 +235,7 @@ func (r *TCPReaderStream) ReadN(n int) ([]byte, error) {
 	for len(r.current.Bytes) < n {
 		r.buf.Write(r.current.Bytes)
 		n -= len(r.current.Bytes)
-		err := r.nextAssembly()
+		err := r.nextReassembly()
 		if err != nil {
 			return r.buf.Bytes(), io.ErrUnexpectedEOF
 		}
@@ -327,7 +301,7 @@ func (r *TCPReaderStream) ReadLine() ([]byte, error) {
 	for pos < 0 {
 		if pos = bytes.IndexByte(r.current.Bytes, '\n'); pos < 0 {
 			r.buf.Write(r.current.Bytes)
-			err := r.nextAssembly()
+			err := r.nextReassembly()
 			if err != nil {
 				return r.buf.Bytes(), nil
 			}
@@ -373,7 +347,7 @@ func (r *TCPReaderStream) Discard(n int) (discarded int, err error) {
 
 		// discard whole Reassembly since toSkip exceeds r.current.Skip + r.current.Bytes
 		toSkip -= len(r.current.Bytes)
-		err = r.nextAssembly()
+		err = r.nextReassembly()
 		if err != nil {
 			return n - toSkip, err
 		}
@@ -386,11 +360,25 @@ func (r *TCPReaderStream) Discard(n int) (discarded int, err error) {
 // are invalid.
 func (r *TCPReaderStream) Close() error {
 	r.closed = true
-	close(r.done)
+
+	if r.readBatch != nil {
+		r.readBatch.clear()
+		reassemblyQueuePool.Put(r.readBatch)
+		r.readBatch = nil
+	}
+
 	r.current = nil
 	r.buf.Reset()
 	bufferPool.Put(r.buf)
 	r.buf = nil
+
+	go func() {
+		for q := <-r.filled; q != nil; q = <-r.filled {
+			q.clear()
+			reassemblyQueuePool.Put(q)
+		}
+	}()
+
 	return nil
 }
 
@@ -398,28 +386,40 @@ func (r *TCPReaderStream) ensureCurrent() (err error) {
 	if r.current != nil && (r.current.Skip > 0 || len(r.current.Bytes) > 0) {
 		return nil
 	}
-	return r.nextAssembly()
+	return r.nextReassembly()
 }
 
-func (r *TCPReaderStream) nextAssembly() (err error) {
+func (r *TCPReaderStream) nextReassembly() (err error) {
 	if r.closed {
 		panic("read from closed TCPReaderStream")
 	}
-	if r.eof {
+	if r.seenEof {
 		return io.EOF
+	}
+	if r.readBatch == nil {
+		if err = r.nextReadBatch(); err != nil {
+			return
+		}
 	}
 	for {
 		r.current, err = r.readBatch.next()
 		if err == nil {
 			return
 		}
-		// prompt write side to swap buffers
-		r.done <- struct{}{}
-		_, ok := <-r.ready
-		if !ok {
-			// end of stream
-			r.eof = true
-			return io.EOF
+
+		r.readBatch.clear()
+		reassemblyQueuePool.Put(r.readBatch)
+		if err = r.nextReadBatch(); err != nil {
+			return
 		}
 	}
+}
+
+func (r *TCPReaderStream) nextReadBatch() (err error) {
+	r.readBatch = <-r.filled
+	if r.readBatch == nil {
+		r.seenEof = true
+		return io.EOF
+	}
+	return nil
 }
