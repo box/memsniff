@@ -77,6 +77,9 @@ type ContextLogger struct {
 
 // NewContext creates a new ContextLogger using l as the underlying destination.
 func NewContext(l Logger, context string) Logger {
+	if l == nil {
+		return nil
+	}
 	return &ContextLogger{context, l}
 }
 
