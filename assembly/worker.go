@@ -101,7 +101,8 @@ func (sf *streamFactory) New(netFlow, transportFlow gopacket.Flow) tcpassembly.S
 		stream = c.ClientReader
 	}
 
-	return wrap{stream, transportFlow}
+	//return wrap{stream, transportFlow}
+	return stream
 }
 
 func (sf *streamFactory) createConsumer(ck connectionKey) *model.Consumer {
@@ -114,7 +115,7 @@ func (sf *streamFactory) createConsumer(ck connectionKey) *model.Consumer {
 	server.LossErrors = true
 
 	c := &mctext.Consumer{
-		Logger:       log.NewContext(sf.logger, ck.DstString()),
+		//Logger:       log.NewContext(sf.logger, ck.DstString()),
 		Handler:      h,
 		ClientReader: client,
 		ServerReader: server,
@@ -129,11 +130,15 @@ func (sf *streamFactory) log(items ...interface{}) {
 	}
 }
 
+type workItem struct {
+	dps    []*decode.DecodedPacket
+	doneCh chan<- struct{}
+}
+
 type worker struct {
 	logger    log.Logger
 	assembler *tcpassembly.Assembler
-	dpsCh     chan []*decode.DecodedPacket
-	doneCh    chan struct{}
+	wiCh      chan workItem
 }
 
 func NewWorker(logger log.Logger, analysis *analysis.Pool, memcachePorts []int) worker {
@@ -145,8 +150,7 @@ func NewWorker(logger log.Logger, analysis *analysis.Pool, memcachePorts []int) 
 	w := worker{
 		logger:    logger,
 		assembler: tcpassembly.NewAssembler(tcpassembly.NewStreamPool(&sf)),
-		dpsCh:     make(chan []*decode.DecodedPacket, 128),
-		doneCh:    make(chan struct{}, 1),
+		wiCh:      make(chan workItem, 128),
 	}
 	w.assembler.MaxBufferedPagesPerConnection = 1
 	w.assembler.MaxBufferedPagesTotal = 1
@@ -154,10 +158,9 @@ func NewWorker(logger log.Logger, analysis *analysis.Pool, memcachePorts []int) 
 	return w
 }
 
-func (w worker) HandlePackets(dps []*decode.DecodedPacket) error {
+func (w worker) handlePackets(dps []*decode.DecodedPacket, doneCh chan<- struct{}) error {
 	select {
-	case w.dpsCh <- dps:
-		<-w.doneCh
+	case w.wiCh <- workItem{dps, doneCh}:
 		return nil
 	default:
 		return errQueueFull
@@ -174,16 +177,14 @@ func (w worker) loop() {
 				w.log("Flushed", f, "Closed", c)
 			}
 
-		case dps, ok := <-w.dpsCh:
+		case wi, ok := <-w.wiCh:
 			if !ok {
 				return
 			}
-			for _, dp := range dps {
-				w.log("assembling:", dp.TCP.TransportFlow(), fmt.Sprintf("%q", string(dp.Payload)))
+			for _, dp := range wi.dps {
 				w.assembler.Assemble(dp.NetFlow, &dp.TCP)
-				w.log("assembly done")
 			}
-			w.doneCh <- struct{}{}
+			wi.doneCh <- struct{}{}
 		}
 	}
 }
