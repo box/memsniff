@@ -30,7 +30,8 @@ func newWorker(logger log.Logger, analysis *analysis.Pool, memcachePorts []int) 
 		logger:        logger,
 		analysis:      analysis,
 		memcachePorts: memcachePorts,
-		halfOpen:      make(map[connectionKey]*model.Consumer),
+
+		halfOpen: make(map[connectionKey]*model.Consumer),
 	}
 	w := worker{
 		logger:    logger,

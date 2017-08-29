@@ -96,17 +96,13 @@ func (sf *streamFactory) New(netFlow, transportFlow gopacket.Flow) tcpassembly.S
 }
 
 func (sf *streamFactory) createConsumer(ck connectionKey) *model.Consumer {
-	h := func(evt model.Event) {
-		sf.analysis.HandleEvents([]model.Event{evt})
-	}
-
 	client, server := reader.NewPair()
 	client.LossErrors = true
 	server.LossErrors = true
 
 	c := &mctext.Consumer{
 		//Logger:       log.NewContext(sf.logger, ck.DstString()),
-		Handler:      h,
+		Handler:      sf.analysis.HandleEvents,
 		ClientReader: client,
 		ServerReader: server,
 	}

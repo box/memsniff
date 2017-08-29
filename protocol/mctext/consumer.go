@@ -19,6 +19,7 @@ type Consumer model.Consumer
 func (c *Consumer) Run() {
 	defer c.ClientReader.Close()
 	defer c.ServerReader.Close()
+	defer (*model.Consumer)(c).FlushEvents()
 	for {
 		c.log("awaiting command")
 		line, err := c.ClientReader.ReadLine()
@@ -82,7 +83,7 @@ func (c *Consumer) handleGet(fields [][]byte) error {
 				Size: size,
 			}
 			c.log("sending event:", evt)
-			c.Handler(evt)
+			c.addEvent(evt)
 			c.log("discarding value")
 			_, err = c.ServerReader.Discard(size + len(crlf))
 			if err != nil {
@@ -116,6 +117,10 @@ func (c *Consumer) discardResponse() error {
 	line, err := c.ServerReader.ReadLine()
 	c.log("discarded response from server:", string(line))
 	return err
+}
+
+func (c *Consumer) addEvent(evt model.Event) {
+	(*model.Consumer)(c).AddEvent(evt)
 }
 
 func (c *Consumer) log(items ...interface{}) {
