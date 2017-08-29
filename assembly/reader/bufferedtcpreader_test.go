@@ -386,27 +386,57 @@ func TestPartnerFlush(t *testing.T) {
 	}
 }
 
-type ReaderStream interface {
+func TestInitialFlush(t *testing.T) {
+	s1, s2 := NewPair()
+	sync := make(chan struct{}, 1)
+	go func() {
+		s2.Reassembled(reassemblyString("2\r\n"))
+		// flush through s1, but reader hasn't started yet
+		for i := 0; i < maxPackets*2; i++ {
+			s1.Reassembled(reassemblyString("1\r\n"))
+		}
+		// allow reader to start
+		sync <- struct{}{}
+		for i := 0; i < maxPackets*2; i++ {
+			s1.Reassembled(reassemblyString("1\r\n"))
+		}
+		s1.ReassemblyComplete()
+		// make sure writer did not get blocked
+		sync <- struct{}{}
+	}()
+	<-sync
+	s2.ReadLine()
+	for i := 0; i < maxPackets*4; i++ {
+		s1.ReadLine()
+	}
+	select {
+	case <-sync:
+	case <-time.After(time.Second):
+		t.Error("timed out")
+	}
+}
+
+type streamReader interface {
 	tcpassembly.Stream
 	io.Reader
 }
 
 func BenchmarkManySmallPackets(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		bench(func() ReaderStream { return New() })
+		bench(func() streamReader { return New() })
 	}
 }
 
 func BenchmarkStandardReader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		bench(func() ReaderStream {
+		bench(func() streamReader {
 			rs := tcpreader.NewReaderStream()
 			return &rs
 		})
 	}
 }
 
-func bench(factory func() ReaderStream) {
+func bench(factory func() streamReader) {
 	numStreams := 10000
 	numPackets := 5
 	var wg sync.WaitGroup

@@ -82,16 +82,16 @@ type TCPReaderStream struct {
 	// will be nil if we have already sent EOF
 	writeBatch *reassemblyQueue
 	// will receive nil after the final reassemblyQueue to indicate EOF
-	filled     chan *reassemblyQueue
+	filled chan *reassemblyQueue
 
 	// owned by reader side
-	readBatch  *reassemblyQueue
+	readBatch *reassemblyQueue
 	// partially consumed Reassembly
-	current    *tcpassembly.Reassembly
+	current *tcpassembly.Reassembly
 	// buf accumulates blocks that extends over multiple Reassemblies in ReadN and ReadLine
-	buf        *bytes.Buffer
-	seenEof    bool
-	closed     bool
+	buf     *bytes.Buffer
+	seenEof bool
+	closed  chan struct{}
 
 	LossErrors bool
 }
@@ -111,6 +111,7 @@ func New() *TCPReaderStream {
 		writeBatch: reassemblyQueuePool.Get().(*reassemblyQueue),
 		filled:     make(chan *reassemblyQueue, 2),
 		buf:        bufferPool.Get().(*bytes.Buffer),
+		closed:     make(chan struct{}),
 	}
 	return r
 }
@@ -119,7 +120,7 @@ func New() *TCPReaderStream {
 // If the buffer fills it is sent to the reader side, blocking if the reader
 // is falling behind.
 func (r *TCPReaderStream) Reassembled(reassembly []tcpassembly.Reassembly) {
-	if r.closed {
+	if r.isClosed() {
 		if !r.sentEOF() {
 			r.sendEOF()
 		}
@@ -128,7 +129,7 @@ func (r *TCPReaderStream) Reassembled(reassembly []tcpassembly.Reassembly) {
 	numAdded := r.writeBatch.add(reassembly)
 	for numAdded < len(reassembly) {
 		r.flushBoth()
-		if r.closed {
+		if r.isClosed() {
 			return
 		}
 		numAdded += r.writeBatch.add(reassembly[numAdded:])
@@ -137,12 +138,21 @@ func (r *TCPReaderStream) Reassembled(reassembly []tcpassembly.Reassembly) {
 
 // ReassemblyComplete sends any buffered stream data to the reader.
 func (r *TCPReaderStream) ReassemblyComplete() {
-	if !r.closed {
+	if !r.isClosed() {
 		// send last batch to reader
 		r.flushBoth()
 	}
 	if !r.sentEOF() {
 		r.sendEOF()
+	}
+}
+
+func (r *TCPReaderStream) isClosed() bool {
+	select {
+	case <-r.closed:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -359,7 +369,7 @@ func (r *TCPReaderStream) Discard(n int) (discarded int, err error) {
 // After Close is called any buffers returned from ReadN or ReadLine
 // are invalid.
 func (r *TCPReaderStream) Close() error {
-	r.closed = true
+	close(r.closed)
 
 	if r.readBatch != nil {
 		r.readBatch.clear()
@@ -390,9 +400,6 @@ func (r *TCPReaderStream) ensureCurrent() (err error) {
 }
 
 func (r *TCPReaderStream) nextReassembly() (err error) {
-	if r.closed {
-		panic("read from closed TCPReaderStream")
-	}
 	if r.seenEof {
 		return io.EOF
 	}
