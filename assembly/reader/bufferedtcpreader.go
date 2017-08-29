@@ -90,13 +90,13 @@ type TCPReaderStream struct {
 	current *tcpassembly.Reassembly
 	// buf accumulates blocks that extends over multiple Reassemblies in ReadN and ReadLine
 	buf     *bytes.Buffer
-	seenEof bool
+	seenEOF bool
 	closed  chan struct{}
 
 	LossErrors bool
 }
 
-// NewStreamPair creates an associated pair of TCPReaderStreams.
+// NewPair creates an associated pair of TCPReaderStreams.
 func NewPair() (client, server *TCPReaderStream) {
 	client = New()
 	server = New()
@@ -105,7 +105,7 @@ func NewPair() (client, server *TCPReaderStream) {
 	return
 }
 
-// NewTCPReaderStream creates a new TCPReaderStream.
+// New creates a new TCPReaderStream.
 func New() *TCPReaderStream {
 	r := &TCPReaderStream{
 		writeBatch: reassemblyQueuePool.Get().(*reassemblyQueue),
@@ -400,7 +400,7 @@ func (r *TCPReaderStream) ensureCurrent() (err error) {
 }
 
 func (r *TCPReaderStream) nextReassembly() (err error) {
-	if r.seenEof {
+	if r.seenEOF {
 		return io.EOF
 	}
 	if r.readBatch == nil {
@@ -425,7 +425,7 @@ func (r *TCPReaderStream) nextReassembly() (err error) {
 func (r *TCPReaderStream) nextReadBatch() (err error) {
 	r.readBatch = <-r.filled
 	if r.readBatch == nil {
-		r.seenEof = true
+		r.seenEOF = true
 		return io.EOF
 	}
 	return nil

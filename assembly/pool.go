@@ -6,22 +6,25 @@ import (
 	"github.com/box/memsniff/log"
 )
 
+// Pool manages a set of workers each responsible for a set of TCP conversations (stream pairs).
 type Pool struct {
 	Logger  log.Logger
 	workers []worker
 }
 
+// New creates a new pool for reassembling TCP streams.
 func New(logger log.Logger, analysis *analysis.Pool, memcachePorts []int, numWorkers int) *Pool {
 	p := &Pool{
 		logger,
 		make([]worker, numWorkers),
 	}
 	for i := 0; i < numWorkers; i++ {
-		p.workers[i] = NewWorker(logger, analysis, memcachePorts)
+		p.workers[i] = newWorker(logger, analysis, memcachePorts)
 	}
 	return p
 }
 
+// HandlePackets partitions packets by connection and dispatches them to assembly workers.
 func (p *Pool) HandlePackets(dps []*decode.DecodedPacket) (err error) {
 	perWorker := p.partition(dps)
 	doneCh := make(chan struct{}, len(p.workers))
