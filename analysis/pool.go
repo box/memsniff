@@ -3,6 +3,7 @@
 package analysis
 
 import (
+	"github.com/box/memsniff/analysis/aggregate"
 	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/protocol/model"
 	"hash/fnv"
@@ -16,11 +17,12 @@ import (
 // by the Pool.
 type Pool struct {
 	// A Logger instance for debugging.  No logging is done if nil.
-	Logger     log.Logger
-	reportSize int
-	workers    []worker
-	filter     filter
-	stats      Stats
+	Logger  log.Logger
+	workers []worker
+	filter  filter
+	stats   Stats
+
+	kaf aggregate.KeyAggregatorFactory
 }
 
 // Stats contains performance metrics for a Pool.
@@ -47,17 +49,21 @@ func (s *Stats) addDropped(n int) {
 // memory consumption.
 //
 // reportSize determines the number of entries returned from Report.
-func New(numWorkers, reportSize int) *Pool {
-	c := &Pool{
-		reportSize: reportSize,
-		workers:    make([]worker, numWorkers),
+func New(numWorkers int, format string) (*Pool, error) {
+	kaf, err := aggregate.NewKeyAggregatorFactory(format)
+	if err != nil {
+		return nil, err
+	}
+	p := &Pool{
+		kaf:     kaf,
+		workers: make([]worker, numWorkers),
 	}
 
 	for i := 0; i < numWorkers; i++ {
-		c.workers[i] = newWorker()
+		p.workers[i] = newWorker(kaf)
 	}
 
-	return c
+	return p, nil
 }
 
 // HandleEvents adds records for a set of datastore operations to the Pool.

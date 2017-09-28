@@ -6,7 +6,7 @@ import (
 )
 
 func TestKeyString(t *testing.T) {
-	kaf, err := parseDescriptor("key, size, sum(size)")
+	kaf, err := NewKeyAggregatorFactory("key, size, sum(size)")
 	if err != nil {
 		t.Error(err)
 	}
@@ -19,18 +19,20 @@ func TestKeyString(t *testing.T) {
 }
 
 func TestKeyAggregator(t *testing.T) {
-	kaf, err := parseDescriptor("key,max(size),sum(size),avg(size)")
+	kaf, err := NewKeyAggregatorFactory("key,max(size),sum(size),avg(size)")
 	if err != nil {
 		t.Error(err)
 	}
 
+	events := eventsWithSizes(10, 10, 10, 10, 60)
 	ka := kaf.New()
-	for _, e := range eventsWithSizes(10, 10, 10, 10, 60) {
+	ka.Key = kaf.Key(events[0])
+	for _, e := range events {
 		ka.Add(e)
 	}
 
-	if len(ka.KeyFields) != 1 || ka.KeyFields[0] != "key" {
-		t.Error(ka.KeyFields)
+	if len(ka.Key) != 1 || ka.Key[0] != "key1" {
+		t.Error(ka.Key)
 	}
 
 	res := ka.Result()
@@ -52,7 +54,7 @@ func TestKeyAggregator(t *testing.T) {
 }
 
 func TestPercentile(t *testing.T) {
-	kaf, err := parseDescriptor("p50(size), p90(size)")
+	kaf, err := NewKeyAggregatorFactory("p50(size), p90(size)")
 	if err != nil {
 		t.Error(err)
 	}

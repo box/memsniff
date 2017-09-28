@@ -28,8 +28,8 @@ var (
 	analysisWorkers = flag.Int("analysisworkers", 32, "number of analysis workers")
 	profiles        = flag.StringSlice("profile", []string{}, "profile types to store (one or more of cpu, heap, block)")
 
-	filter     = flag.StringP("filter", "f", "", "regex pattern of cache keys to track")
-	reportSize = flag.IntP("top", "t", 100, "number of keys to report")
+	filter     = flag.String("filter", "", "regex pattern of cache keys to track")
+	format     = flag.StringP("format", "f", "key,max(size),sum(size)", "data and aggregates to display")
 	interval   = flag.IntP("interval", "n", 1, "report top keys every this many seconds")
 	cumulative = flag.Bool("cumulative", false, "accumulate keys over all time instead of an interval")
 
@@ -55,15 +55,19 @@ func main() {
 	buffered := &log.BufferLogger{}
 	logger.SetLogger(buffered)
 
-	analysisPool := analysis.New(*analysisWorkers, *reportSize)
-	if err := analysisPool.SetFilterPattern(*filter); err != nil {
-		(&log.ConsoleLogger{}).Log(err)
+	analysisPool, err := analysis.New(*analysisWorkers, *format)
+	if err != nil {
+		log.ConsoleLogger{}.Log(err)
+		os.Exit(1)
+	}
+	if err = analysisPool.SetFilterPattern(*filter); err != nil {
+		log.ConsoleLogger{}.Log(err)
 		os.Exit(1)
 	}
 
 	packetSource, err := capture.New(*netInterface, *infile, *bufferSize, *noDelay, *ports)
 	if err != nil {
-		(&log.ConsoleLogger{}).Log(err)
+		log.ConsoleLogger{}.Log(err)
 		os.Exit(2)
 	}
 
