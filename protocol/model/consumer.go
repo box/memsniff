@@ -39,6 +39,20 @@ type Event struct {
 // EventHandler consumes a batch of events.
 type EventHandler func(evts []Event)
 
+type EventFieldMask int
+
+const (
+	FieldNone EventFieldMask = 0
+	FieldKey EventFieldMask = 1 << iota
+	FieldSize
+
+	FieldEndOfFields
+)
+
+const (
+	IntFields = FieldSize
+)
+
 // Reader represents a subset of the bufio.Reader interface.
 type Reader interface {
 	// Discard skips the next n bytes, returning the number of bytes discarded.
