@@ -13,6 +13,8 @@ type Aggregator interface {
 	Add(n int64)
 	// Result returns the final output of aggregation.
 	Result() int64
+	// Reset returns the aggregator to its initial state.
+	Reset()
 }
 
 // maxMicros is the longest time interval we are interested in tracking by default, just over a minute assuming
@@ -47,6 +49,11 @@ func (m *Max) Result() int64 {
 	return m.max
 }
 
+func (m *Max) Reset() {
+	m.seenFirst = false
+	m.max = 0
+}
+
 // Min retains the minimum value in the aggregated data.
 type Min struct {
 	min       int64
@@ -68,6 +75,11 @@ func (m *Min) Result() int64 {
 	return m.min
 }
 
+func (m *Min) Reset() {
+	m.seenFirst = false
+	m.min = 0
+}
+
 // Sum returns the sum of the aggregated data.
 type Sum struct {
 	sum int64
@@ -79,6 +91,10 @@ func (s *Sum) Add(n int64) {
 
 func (s *Sum) Result() int64 {
 	return s.sum
+}
+
+func (s *Sum) Reset() {
+	s.sum = 0
 }
 
 // Mean returns the arithmetic mean of the aggregated data.
@@ -97,6 +113,11 @@ func (m *Mean) Result() int64 {
 		return 0
 	}
 	return m.sum / m.count
+}
+
+func (m *Mean) Reset() {
+	m.sum = 0
+	m.count = 0
 }
 
 // Percentile returns the nth percentile sample from the aggregated data.
@@ -129,6 +150,11 @@ func (p *Percentile) Result() int64 {
 	return v
 }
 
+func (p *Percentile) Reset() {
+	p.h.Reset()
+}
+
+// IsValidAgg returns true if desc is a valid descriptor for an aggregator type.
 func IsValidAgg(desc string) bool {
 	switch desc {
 	case "max", "min", "mean", "avg", "sum":
@@ -145,6 +171,8 @@ func IsValidAgg(desc string) bool {
 	}
 }
 
+// NewFromDescriptor returns an aggregator that implements desc.
+// Returns BadDescriptorError if desc cannot be parsed.
 func NewFromDescriptor(desc string) (Aggregator, error) {
 	f, err := NewFactoryFromDescriptor(desc)
 	if err != nil {
@@ -153,8 +181,11 @@ func NewFromDescriptor(desc string) (Aggregator, error) {
 	return f(), nil
 }
 
+// AggregatorFactory creates a new Aggregator initialized to zero.
 type AggregatorFactory func() Aggregator
 
+// NewFactoryFromDescriptor returns an AggregatorFactory that will create
+// Aggregators based on desc.  Returns BadDescriptorError if desc is not a valid descriptor.
 func NewFactoryFromDescriptor(desc string) (AggregatorFactory, error) {
 	switch desc {
 	case "max":

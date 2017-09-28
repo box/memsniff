@@ -17,11 +17,7 @@ func init() {
 	}
 }
 
-func Size(e model.Event) int64 {
-	return int64(e.Size)
-}
-
-func fieldIdFromDescriptor(desc string) (model.EventFieldMask, error) {
+func fieldIDFromDescriptor(desc string) (model.EventFieldMask, error) {
 	switch desc {
 	case "key":
 		return model.FieldKey, nil
@@ -30,6 +26,16 @@ func fieldIdFromDescriptor(desc string) (model.EventFieldMask, error) {
 	default:
 		return 0, BadDescriptorError(desc)
 	}
+}
+
+func fieldsAsStrings(e model.Event, mask model.EventFieldMask) []string {
+	res := make([]string, 0, 2)
+	for id := model.EventFieldMask(1); id < model.FieldEndOfFields; id <<= 1 {
+		if mask&id == id {
+			res = append(res, fieldAsString(e, id))
+		}
+	}
+	return res
 }
 
 func fieldsAsString(e model.Event, mask model.EventFieldMask) string {

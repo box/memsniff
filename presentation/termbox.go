@@ -120,25 +120,36 @@ func (u *uiContext) handleNewMessage(msg string) {
 	}
 }
 
-func renderHeader() {
-	renderText(0, 0, "Key")
-	renderText(8, 0, "Requests (est)")
-	renderText(9, 0, "Size")
-	renderText(10, 0, "Bandwidth (est)")
+func renderHeader(rep analysis.Report) {
+	var col int
+	for _, h := range rep.KeyColNames {
+		renderText(col, 0, h)
+		col += 4
+	}
+	for _, h := range rep.ValColNames {
+		renderText(col, 0, h)
+		col++
+	}
 	renderLine(0, 12, 1, '-')
 }
 
 func renderReport(rep analysis.Report) {
 	lastY := yFromBottom(statusLines + logLines)
-	for i, kr := range rep.Keys {
+	for i, r := range rep.Rows {
+		col := 0
 		y := i + 2
+		for _, h := range r.Key {
+			renderText(col, y, h)
+			col += 4
+		}
+		for _, v := range r.Values {
+			renderText(col, y, strconv.Itoa(int(v)))
+			col++
+		}
+		y++
 		if y > lastY {
 			break
 		}
-		renderText(0, y, kr.Name)
-		renderText(8, y, strconv.Itoa(kr.RequestsEstimate))
-		renderText(9, y, strconv.Itoa(kr.Size))
-		renderText(10, y, strconv.Itoa(kr.TrafficEstimate))
 	}
 }
 
@@ -212,8 +223,9 @@ func (u *uiContext) update() error {
 	rep := u.analysis.Report(!u.cumulative)
 	if !u.paused {
 		u.prevReport = rep
+		u.prevReport.SortBy(-2)
 	}
-	renderHeader()
+	renderHeader(u.prevReport)
 	renderReport(u.prevReport)
 	u.renderFooter(u.prevReport)
 	u.renderMessages()

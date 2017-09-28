@@ -1,46 +1,81 @@
 package analysis
 
 import (
-	"github.com/box/memsniff/hotlist"
 	"sort"
 	"time"
 )
 
-// KeyReport contains activity information for a single cache key.
-type KeyReport struct {
-	// cache key
-	Name string
-	// size of the cache value in bytes
-	Size int
-	// number of requests for this cache key
-	RequestsEstimate int
-	// amount of bandwidth consumed by traffic for this cache key in bytes
-	TrafficEstimate int
+// ReportRow contains activity information for a single cache key.
+type ReportRow struct {
+	Key    []string
+	Values []int64
 }
 
 // Report represents key activity submitted to a Pool since the last call to
 // Reset.
 type Report struct {
 	// when this report was generated
-	Timestamp time.Time
-	// key reports in descending order by TrafficEstimate
-	Keys []KeyReport
+	Timestamp   time.Time
+	KeyColNames []string
+	ValColNames []string
+	Rows        []ReportRow
 }
 
-// Len implements sort.Interface for Report.
-func (r Report) Len() int {
-	return len(r.Keys)
+func (r *Report) SortBy(columns ...int) {
+	sort.Sort(&reportSort{r, columns})
 }
 
-// Less implements sort.Interface for Report, sorting KeyReports in descending
-// order by TrafficEstimate.
-func (r Report) Less(i, j int) bool {
-	return r.Keys[j].TrafficEstimate < r.Keys[i].TrafficEstimate
+type reportSort struct {
+	report      *Report
+	sortColumns []int
 }
 
-// Swap implements sort.Interface for Report.
-func (r Report) Swap(i, j int) {
-	r.Keys[i], r.Keys[j] = r.Keys[j], r.Keys[i]
+func (rs *reportSort) Len() int {
+	return len(rs.report.Rows)
+}
+
+func (rs *reportSort) Less(a, b int) bool {
+	for _, col := range rs.sortColumns {
+		descending := col < 0
+		if descending {
+			col = -col
+		}
+
+		var onValue bool
+		if col >= len(rs.report.KeyColNames) {
+			onValue = true
+			col -= len(rs.report.KeyColNames)
+		}
+
+		if onValue {
+			// sorting by int64 values
+			valA := rs.report.Rows[a].Values[col]
+			valB := rs.report.Rows[b].Values[col]
+			if valA == valB {
+				continue
+			}
+			if descending {
+				return valA > valB
+			}
+			return valA < valB
+		}
+
+		// sorting by string
+		valA := rs.report.Rows[a].Key[col]
+		valB := rs.report.Rows[b].Key[col]
+		if valA == valB {
+			continue
+		}
+		if descending {
+			return valA > valB
+		}
+		return valA < valB
+	}
+	return false
+}
+
+func (rs *reportSort) Swap(a, b int) {
+	rs.report.Rows[a], rs.report.Rows[b] = rs.report.Rows[b], rs.report.Rows[a]
 }
 
 // Report returns a summary of activity recorded in this Pool since the last
@@ -56,40 +91,24 @@ func (r Report) Swap(i, j int) {
 // may be carried over between successive reports, and some data may be
 // lost entirely.
 func (p *Pool) Report(shouldReset bool) Report {
-	allEntries := make([]hotlist.Entry, 0, p.reportSize*len(p.workers))
+	var rows []ReportRow
 	for _, w := range p.workers {
-		workerEntries := w.top(p.reportSize)
+		workerEntries := w.result()
 		if shouldReset {
 			w.reset()
 		}
-		allEntries = append(allEntries, workerEntries...)
+		for i := range workerEntries.keyFields {
+			row := ReportRow{
+				Key:    workerEntries.keyFields[i],
+				Values: workerEntries.aggResults[i],
+			}
+			rows = append(rows, row)
+		}
 	}
-
-	reportSize := len(allEntries)
-	if reportSize > p.reportSize {
-		reportSize = p.reportSize
-	}
-
-	ret := Report{
-		Timestamp: time.Now(),
-		Keys:      make([]KeyReport, 0, reportSize),
-	}
-
-	for _, e := range allEntries {
-		ret.Keys = append(ret.Keys, keyReport(e))
-	}
-
-	sort.Sort(ret)
-
-	return ret
-}
-
-func keyReport(e hotlist.Entry) KeyReport {
-	ki := e.Item().(keyInfo)
-	return KeyReport{
-		Name:             ki.name,
-		Size:             ki.size,
-		RequestsEstimate: e.Count(),
-		TrafficEstimate:  e.Count() * ki.size,
+	return Report{
+		Timestamp:   time.Now(),
+		KeyColNames: p.kaf.KeyFields,
+		ValColNames: p.kaf.AggFields,
+		Rows:        rows,
 	}
 }

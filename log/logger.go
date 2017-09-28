@@ -45,6 +45,7 @@ func (b *BufferLogger) WriteTo(l Logger) {
 	for _, items := range b.buf {
 		l.Log(items...)
 	}
+	b.buf = nil
 }
 
 // ProxyLogger is a stable recipient of log messages that can be configured

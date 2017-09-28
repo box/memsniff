@@ -72,8 +72,7 @@ func (w worker) loop() {
 				return
 			}
 			for _, dp := range wi.dps {
-				mostRecent = dp.Info.Timestamp
-				w.assembler.AssembleWithTimestamp(dp.NetFlow, &dp.TCP, mostRecent)
+				w.assembler.AssembleWithTimestamp(dp.NetFlow, &dp.TCP, dp.Info.Timestamp)
 			}
 			wi.doneCh <- struct{}{}
 		}

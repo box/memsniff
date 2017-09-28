@@ -9,48 +9,9 @@ import (
 	"github.com/google/gopacket/tcpassembly"
 )
 
-// EventType described what sort of event has occurred.
-type EventType int
-
-const (
-	// EventUnknown is an unhandled event.
-	EventUnknown EventType = iota
-	// EventGetHit is a successful data retrieval that returned data.
-	EventGetHit
-	// EventGetMiss is a data retrieval that did not result in data.
-	EventGetMiss
-)
-
 var (
 	bufferPool = sync.Pool{New: func() interface{} { return reader.New() }}
 	eofSource  = &DummySource{}
-)
-
-// Event is a single event in a datastore conversation
-type Event struct {
-	// Type of the event.
-	Type EventType
-	// Datastore key affected by this event.
-	Key string
-	// Size of the datastore value affected by this event.
-	Size int
-}
-
-// EventHandler consumes a batch of events.
-type EventHandler func(evts []Event)
-
-type EventFieldMask int
-
-const (
-	FieldNone EventFieldMask = 0
-	FieldKey EventFieldMask = 1 << iota
-	FieldSize
-
-	FieldEndOfFields
-)
-
-const (
-	IntFields = FieldSize
 )
 
 // Reader represents a subset of the bufio.Reader interface.
