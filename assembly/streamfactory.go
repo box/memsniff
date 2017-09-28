@@ -45,6 +45,9 @@ type streamFactory struct {
 	halfOpen map[connectionKey]*model.Consumer
 }
 
+// IsFromServer returns true if we believe this packet is coming from the server.
+// Note that it will misidentify a client using a server port as a source ephemeral port.
+// For now we accept that possibility, but we could try to infer based on source IP as well.
 func (sf *streamFactory) IsFromServer(transportFlow gopacket.Flow) bool {
 	port := srcPort(transportFlow)
 	return isInPortlist(sf.memcachePorts, port)
@@ -97,6 +100,7 @@ func (sf *streamFactory) New(netFlow, transportFlow gopacket.Flow) tcpassembly.S
 
 func (sf *streamFactory) createConsumer(ck connectionKey) *model.Consumer {
 	client, server := reader.NewPair()
+	// ensure that we report data loss in the TCP stream to the consumer
 	client.LossErrors = true
 	server.LossErrors = true
 

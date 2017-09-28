@@ -89,5 +89,5 @@ type Event struct {
 	Size int
 }
 
-// EventHandler consumes a single event.
+// EventHandler consumes a batch of events.
 type EventHandler func(evts []Event)

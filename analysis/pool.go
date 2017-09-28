@@ -62,7 +62,7 @@ func New(numWorkers, reportSize int) *Pool {
 
 // HandleEvents adds records for a set of datastore operations to the Pool.
 //
-// The events will be dispatched to its assigned worker.  If the worker
+// The events will be dispatched to their assigned workers.  If a worker
 // is overloaded, all inputs for that worker  will be discarded and statistics
 // for this Pool updated to reflect the lost data.
 //
@@ -81,11 +81,11 @@ func (p *Pool) HandleEvents(evts []model.Event) {
 	}
 }
 
-func (p *Pool) partitionEvents(rs []model.Event) [][]model.Event {
+func (p *Pool) partitionEvents(evts []model.Event) [][]model.Event {
 	perWorkerEvents := make([][]model.Event, len(p.workers))
-	for _, r := range rs {
-		slot := p.keySlot(r.Key)
-		perWorkerEvents[slot] = append(perWorkerEvents[slot], r)
+	for _, e := range evts {
+		slot := p.keySlot(e.Key)
+		perWorkerEvents[slot] = append(perWorkerEvents[slot], e)
 	}
 	return perWorkerEvents
 }

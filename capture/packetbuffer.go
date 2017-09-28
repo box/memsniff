@@ -35,7 +35,7 @@ func (b *BlockBuffer) BytesRemaining() int {
 	return cap(b.data) - len(b.data)
 }
 
-// Block returns a slice refenencing block n, indexed from 0.
+// Block returns a slice referencing block n, indexed from 0.
 // Any modifications to the returned slice modify the contents of the buffer.
 func (b *BlockBuffer) Block(n int) []byte {
 	start := 0

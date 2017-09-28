@@ -38,6 +38,8 @@ func newWorker(logger log.Logger, analysis *analysis.Pool, memcachePorts []int) 
 		assembler: tcpassembly.NewAssembler(tcpassembly.NewStreamPool(&sf)),
 		wiCh:      make(chan workItem, 128),
 	}
+	// Don't let the Assembly buffer much data in an attempt to compensate for out-of-order
+	// and missing packets.  Just report the data as lost downstream and continue.
 	w.assembler.MaxBufferedPagesPerConnection = 1
 	w.assembler.MaxBufferedPagesTotal = 1
 	go w.loop()
