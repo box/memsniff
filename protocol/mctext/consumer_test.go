@@ -52,11 +52,13 @@ func TestTextIncompleteBody(t *testing.T) {
 }
 
 func testReadText(t *testing.T, lines []string, expected []model.Event) {
-	handler := func(e model.Event) {
-		if e != expected[0] {
-			t.Error("Expected", expected[0], "got", e)
+	handler := func(evts []model.Event) {
+		for _, e := range evts {
+			if e != expected[0] {
+				t.Error("Expected", expected[0], "got", e)
+			}
+			expected = expected[1:]
 		}
-		expected = expected[1:]
 	}
 	client, server := reader.NewPair()
 	r := Consumer{

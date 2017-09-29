@@ -56,6 +56,8 @@ func (q *reassemblyQueue) next() (*tcpassembly.Reassembly, error) {
 }
 
 func (q *reassemblyQueue) clear() {
+	// q.reassembled only holds references into q.bytes, and write cursor is managed via q.bytes.BlockLen(),
+	// so no need to clear out q.reassembled.
 	q.cursor = 0
 	q.bytes.Clear()
 }
@@ -79,12 +81,15 @@ func (e ErrLostData) Error() string {
 type TCPReaderStream struct {
 	partner *TCPReaderStream
 
+	// owned by writer side
+
 	// will be nil if we have already sent EOF
 	writeBatch *reassemblyQueue
 	// will receive nil after the final reassemblyQueue to indicate EOF
 	filled chan *reassemblyQueue
 
 	// owned by reader side
+
 	readBatch *reassemblyQueue
 	// partially consumed Reassembly
 	current *tcpassembly.Reassembly
@@ -148,6 +153,7 @@ func (r *TCPReaderStream) ReassemblyComplete() {
 }
 
 func (r *TCPReaderStream) isClosed() bool {
+	// r.closed is closed by the reader side, so we can read it as much as we like.
 	select {
 	case <-r.closed:
 		return true
@@ -164,7 +170,7 @@ func (r *TCPReaderStream) sendEOF() {
 	r.writeBatch.clear()
 	reassemblyQueuePool.Put(r.writeBatch)
 	r.writeBatch = nil
-	r.filled <- r.writeBatch
+	r.filled <- nil
 }
 
 func (r *TCPReaderStream) flushBoth() {
@@ -190,16 +196,10 @@ func (r *TCPReaderStream) flush() {
 // If EOF is encountered, n will be less than len(p).
 // At EOF, the count will be zero and err will be io.EOF.
 func (r *TCPReaderStream) Read(p []byte) (n int, err error) {
-	err = r.ensureCurrent()
-	if err != nil {
+	if err = r.reportSkip(); err != nil {
 		return
 	}
 
-	if r.current.Skip != 0 && r.LossErrors {
-		err = ErrLostData{r.current.Skip}
-		r.current.Skip = 0
-		return 0, err
-	}
 	for n < len(p) {
 		numBytes := copy(p[n:], r.current.Bytes)
 		n += numBytes
@@ -222,14 +222,7 @@ func (r *TCPReaderStream) Read(p []byte) (n int, err error) {
 //
 // The returned buffer is only valid until the next call to ReadN, ReadLine or Close.
 func (r *TCPReaderStream) ReadN(n int) ([]byte, error) {
-	err := r.ensureCurrent()
-	if err != nil {
-		return nil, err
-	}
-
-	if r.current.Skip != 0 && r.LossErrors {
-		err := ErrLostData{r.current.Skip}
-		r.current.Skip = 0
+	if err := r.reportSkip(); err != nil {
 		return nil, err
 	}
 
@@ -264,8 +257,8 @@ func (r *TCPReaderStream) ReadN(n int) ([]byte, error) {
 // Peek will not advance past lost data, and will repeatedly
 // return ErrLostData until a Read, ReadN, or ReadLine operation.
 func (r *TCPReaderStream) Peek(n int) ([]byte, error) {
-	err := r.ensureCurrent()
-	if err != nil {
+	// use ensureCurrent() instead of reportSkip() to avoid advancing past the gap.
+	if err := r.ensureCurrent(); err != nil {
 		return nil, err
 	}
 
@@ -287,14 +280,7 @@ func (r *TCPReaderStream) Peek(n int) ([]byte, error) {
 // The text returned from ReadLine does not include the line end ("\r\n" or "\n").
 // No indication or error is given if the input ends without a final line end.
 func (r *TCPReaderStream) ReadLine() ([]byte, error) {
-	err := r.ensureCurrent()
-	if err != nil {
-		return nil, err
-	}
-
-	if r.current.Skip != 0 && r.LossErrors {
-		err := ErrLostData{r.current.Skip}
-		r.current.Skip = 0
+	if err := r.reportSkip(); err != nil {
 		return nil, err
 	}
 
@@ -337,8 +323,8 @@ func (r *TCPReaderStream) Discard(n int) (discarded int, err error) {
 		return
 	}
 
-	err = r.ensureCurrent()
-	if err != nil {
+	// use ensureCurrent instead of reportSkip() since we can do something meaningful
+	if err = r.ensureCurrent(); err != nil {
 		return
 	}
 
@@ -369,6 +355,7 @@ func (r *TCPReaderStream) Discard(n int) (discarded int, err error) {
 // After Close is called any buffers returned from ReadN or ReadLine
 // are invalid.
 func (r *TCPReaderStream) Close() error {
+	// notify the writer; now isClosed() will return true
 	close(r.closed)
 
 	if r.readBatch != nil {
@@ -382,12 +369,16 @@ func (r *TCPReaderStream) Close() error {
 	bufferPool.Put(r.buf)
 	r.buf = nil
 
-	go func() {
-		for q := <-r.filled; q != nil; q = <-r.filled {
-			q.clear()
-			reassemblyQueuePool.Put(q)
-		}
-	}()
+	if !r.seenEOF {
+		// closing before reaching EOF from the writer.
+		// consume and discard any data sent before the writer detected the close.
+		go func() {
+			for q := <-r.filled; q != nil; q = <-r.filled {
+				q.clear()
+				reassemblyQueuePool.Put(q)
+			}
+		}()
+	}
 
 	return nil
 }
@@ -397,6 +388,17 @@ func (r *TCPReaderStream) ensureCurrent() (err error) {
 		return nil
 	}
 	return r.nextReassembly()
+}
+
+func (r *TCPReaderStream) reportSkip() (err error) {
+	if err = r.ensureCurrent(); err != nil {
+		return err
+	}
+	if r.current.Skip != 0 && r.LossErrors {
+		err = ErrLostData{r.current.Skip}
+		r.current.Skip = 0
+	}
+	return
 }
 
 func (r *TCPReaderStream) nextReassembly() (err error) {
@@ -411,14 +413,17 @@ func (r *TCPReaderStream) nextReassembly() (err error) {
 	for {
 		r.current, err = r.readBatch.next()
 		if err == nil {
+			// got another Reassembly from the current batch, continue reading
 			return
 		}
 
+		// reached end of current batch, return it to the pool
 		r.readBatch.clear()
 		reassemblyQueuePool.Put(r.readBatch)
 		if err = r.nextReadBatch(); err != nil {
 			return
 		}
+		// loop around to read first Reassembly from the new batch
 	}
 }
 

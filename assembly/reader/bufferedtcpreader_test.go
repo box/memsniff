@@ -34,7 +34,7 @@ func TestSmallPackets(t *testing.T) {
 		t.Error("got error from ReadAll", err)
 	}
 	if !bytes.Equal(out[:10], p1[0].Bytes) || !bytes.Equal(out[10:20], p2[0].Bytes) {
-		t.Error("expected", "got", string(out))
+		t.Error("expected", p1[0], p2[0], "got", string(out))
 	}
 }
 
@@ -69,12 +69,12 @@ func TestReadMissing(t *testing.T) {
 		t.Error("expected 0 bytes read, got", n)
 	}
 	if err != (ErrLostData{-1}) || !strings.Contains(err.Error(), "unknown") {
-		t.Error("expected 10 bytes lost, got", err)
+		t.Error("expected unknown bytes lost, got", err)
 	}
 
 	n, err = r.Read(buf)
 	if n != 5 {
-		t.Error("expected 0 bytes read, got", n)
+		t.Error("expected 5 bytes read, got", n)
 	}
 	if err != nil {
 		t.Error("expected no error, got", err)
@@ -315,19 +315,6 @@ func TestCloseAllowsWritesToProceed(t *testing.T) {
 		r.Reassembled(reassemblyString("foobarbaz"))
 	}
 	r.ReassemblyComplete()
-}
-
-func TestReadAfterClosePanics(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fail()
-		}
-	}()
-	r := New()
-	r.Close()
-	// expect panic
-	_, _ = r.ReadLine()
-	t.Fail()
 }
 
 func TestCloseDuringFlush(t *testing.T) {
