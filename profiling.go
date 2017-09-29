@@ -20,6 +20,9 @@ func startProfiling() func() {
 	if isProfileEnabled("block") {
 		runtime.SetBlockProfileRate(1)
 	}
+	if isProfileEnabled("heap") {
+		runtime.MemProfileRate = 16 * 1024
+	}
 
 	return dumpProfiles
 }

@@ -3,7 +3,7 @@ package analysis
 import (
 	"errors"
 	"github.com/box/memsniff/hotlist"
-	"github.com/box/memsniff/protocol"
+	"github.com/box/memsniff/protocol/model"
 )
 
 // worker accumulates usage data for a set of cache keys.
@@ -49,17 +49,19 @@ func newWorker() worker {
 	return w
 }
 
-// handleGetResponse asynchronously adds a record of r to the hotlist for this
-// worker.
-// handleGetResponse is threadsafe.
-// When handleGetResponse returns, all relevant data from r has been copied
+// handleEvents asynchronously processes events.
+// handleEvents is threadsafe.
+// When handleEvents returns, all relevant data from rs has been copied
 // and is safe for the caller to discard.
-func (w *worker) handleGetResponses(rs []*protocol.GetResponse) error {
+func (w *worker) handleEvents(evts []model.Event) error {
 	// Make sure we copy r.Key before we return, since it may be a pointer
 	// into a buffer that will be overwritten.
-	kis := make([]keyInfo, len(rs))
-	for i, r := range rs {
-		kis[i] = keyInfo{string(r.Key), r.Size}
+	kis := make([]keyInfo, 0, len(evts))
+	for i, evt := range evts {
+		if evt.Type == model.EventGetHit {
+			kis = kis[:i+1]
+			kis[i] = keyInfo{evt.Key, evt.Size}
+		}
 	}
 	select {
 	case w.kisChan <- kis:

@@ -29,7 +29,7 @@ func TestTooManyPackets(t *testing.T) {
 		t.Fail()
 	}
 	err = uut.Append(pd)
-	if err != ErrPacketsFull {
+	if err != ErrBlocksFull {
 		t.Fail()
 	}
 }
