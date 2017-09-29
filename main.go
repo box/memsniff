@@ -5,11 +5,11 @@ package main
 import (
 	"fmt"
 	"github.com/box/memsniff/analysis"
+	"github.com/box/memsniff/assembly"
 	"github.com/box/memsniff/capture"
 	"github.com/box/memsniff/decode"
 	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/presentation"
-	"github.com/box/memsniff/protocol"
 	flag "github.com/spf13/pflag"
 	"os"
 	"os/signal"
@@ -23,6 +23,7 @@ var (
 	ports        = flag.IntSliceP("ports", "p", []int{11211}, "memcached ports to listen on")
 
 	decodeWorkers   = flag.Int("decodeworkers", 8, "number of decode workers")
+	assemblyWorkers = flag.Int("assemblyworkers", 8, "number of TCP assembly workers")
 	analysisWorkers = flag.Int("analysisworkers", 32, "number of analysis workers")
 	profiles        = flag.StringSlice("profile", []string{}, "profile types to store (one or more of cpu, heap, block)")
 
@@ -107,8 +108,8 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 		stats.PacketsDroppedParser = decodeStats.PacketsDropped
 
 		analysisStats := analysisPool.Stats()
-		stats.ResponsesParsed = analysisStats.ResponsesHandled
-		stats.PacketsDroppedAnalysis = analysisStats.ResponsesDropped
+		stats.ResponsesParsed = int(analysisStats.EventsHandled)
+		stats.PacketsDroppedAnalysis = int(analysisStats.EventsDropped)
 
 		stats.PacketsPassedFilter = stats.PacketsDroppedKernel + stats.PacketsCaptured
 		stats.PacketsDroppedTotal = stats.PacketsDroppedKernel + stats.PacketsDroppedParser + stats.PacketsDroppedAnalysis
@@ -118,15 +119,11 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 }
 
 func packetHandler(analysisPool *analysis.Pool) func(dps []*decode.DecodedPacket) {
+	pool := assembly.New(logger, analysisPool, *ports, *assemblyWorkers)
 	return func(dps []*decode.DecodedPacket) {
-		var allResponses []*protocol.GetResponse
-		for _, dp := range dps {
-			if len(dp.Payload) > 0 {
-				// ignore err, just try to read what we can
-				responses, _ := protocol.Read(dp.Payload)
-				allResponses = append(allResponses, responses...)
-			}
+		err := pool.HandlePackets(dps)
+		if err != nil {
+			logger.Log(err)
 		}
-		analysisPool.HandleGetResponses(allResponses)
 	}
 }

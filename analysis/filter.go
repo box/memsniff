@@ -1,7 +1,7 @@
 package analysis
 
 import (
-	"github.com/box/memsniff/protocol"
+	"github.com/box/memsniff/protocol/model"
 	"regexp"
 	"sync"
 )
@@ -12,15 +12,15 @@ type filter struct {
 	r *regexp.Regexp
 }
 
-func (f *filter) filterResponses(rs []*protocol.GetResponse) []*protocol.GetResponse {
+func (f *filter) filterEvents(rs []model.Event) []model.Event {
 	re := f.regex()
 	if re == nil {
 		return rs
 	}
 
-	matches := make([]*protocol.GetResponse, 0, len(rs))
+	matches := make([]model.Event, 0, len(rs))
 	for _, r := range rs {
-		if re.Match(r.Key) {
+		if re.MatchString(r.Key) {
 			matches = append(matches, r)
 		}
 	}
