@@ -6,7 +6,6 @@ import (
 	"io"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -22,11 +21,7 @@ func (tl testLogger) Log(items ...interface{}) {
 // TestSeparateGoroutine tests that the packet handler is invoked on a separate
 // goroutine from the caller
 func TestSeparateGoroutine(t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-
 	handler := func(dps []*DecodedPacket) {
-		defer wg.Done()
 		for i := 1; ; i++ {
 			pc, _, _, ok := runtime.Caller(i)
 			if !ok {
@@ -41,38 +36,33 @@ func TestSeparateGoroutine(t *testing.T) {
 		}
 	}
 
-	p := NewPool(testLogger{t}, 8, nil, handler)
-	w := <-p.readyQ
-	_ = w.buf().Append(capture.PacketData{})
-	w.work()
-	wg.Wait()
+	p := NewPool(testLogger{t}, &testSource{[]capture.PacketData{{}}}, handler)
+	p.Run()
 }
 
-// emptySource is a capture.PacketSource that immediately returns EOF.
-type emptySource struct{}
-
-func (es emptySource) CollectPackets(pb *capture.PacketBuffer) error {
-	return io.EOF
+type testSource struct {
+	packets []capture.PacketData
 }
 
-func (es emptySource) DiscardPacket() error {
+func (ts *testSource) CollectPackets(pb *capture.PacketBuffer) error {
+	if len(ts.packets) == 0 {
+		return io.EOF
+	}
+	pb.Append(ts.packets[0])
+	ts.packets = ts.packets[1:]
 	return nil
 }
 
-func (es emptySource) Stats() (*pcap.Stats, error) {
+func (ts *testSource) Stats() (*pcap.Stats, error) {
 	return &pcap.Stats{}, nil
 }
 
-// TestGoroutineCount checks that Pool starts the expected number of worker
-// goroutines and shuts them down at the end of input.
+// TestGoroutineCount checks that Pool shuts down the workers at the end of input.
 func TestGoroutineCount(t *testing.T) {
-	workers := 4
+	// allow state to settle, since sometimes Goroutines owned by the runtime exit during this test.
+	time.Sleep(100 * time.Millisecond)
 	before := runtime.NumGoroutine()
-	p := NewPool(testLogger{t}, workers, &emptySource{}, nil)
-	after := runtime.NumGoroutine()
-	if after != before+workers {
-		t.Error("NewPool started", after-before, "new goroutines instead of", workers)
-	}
+	p := NewPool(testLogger{t}, &testSource{[]capture.PacketData{{}}}, func(dps []*DecodedPacket) {})
 
 	p.Run()
 	time.Sleep(100 * time.Millisecond)
