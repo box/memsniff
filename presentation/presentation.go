@@ -38,8 +38,6 @@ type Stats struct {
 	PacketsCaptured int
 	// count of packets dropped due to kernel buffer overflow
 	PacketsDroppedKernel int
-	// count of packets dropped due to no decoder available
-	PacketsDroppedParser int
 	// count of packets dropped due to analysis queue being full
 	PacketsDroppedAnalysis int
 	PacketsDroppedTotal    int

@@ -166,9 +166,8 @@ func dropLabel(s Stats) string {
 		dropRate = float64(s.PacketsDroppedTotal) / float64(s.PacketsPassedFilter)
 	}
 
-	return fmt.Sprintf("Dropped: %d+%d+%d=%d (%5.2f%%)",
-		s.PacketsDroppedKernel, s.PacketsDroppedParser,
-		s.PacketsDroppedAnalysis, s.PacketsDroppedTotal, dropRate*100)
+	return fmt.Sprintf("Dropped: %d+%d=%d (%5.2f%%)",
+		s.PacketsDroppedKernel, s.PacketsDroppedAnalysis, s.PacketsDroppedTotal, dropRate*100)
 }
 
 func renderText(column int, y int, txt string) {

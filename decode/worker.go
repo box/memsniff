@@ -14,22 +14,6 @@ type worker struct {
 	handler     packetHandler
 }
 
-// startWorker creates a background Worker that will send itself to q when it
-// is ready for a new batch of packets.  This Worker can then be given work
-// or closed, which will clean up the goroutine.
-//
-// handler will be invoked on the Worker's background goroutine.
-func (p *Pool) startWorker(q workerQueue, handler packetHandler, batchSize int, maxBytes int, id int) {
-	w := worker{
-		id:          id,
-		workerQueue: q,
-		pb:          capture.NewPacketBuffer(batchSize, maxBytes),
-		workReady:   make(chan struct{}, 1),
-		handler:     handler,
-	}
-	go w.loop()
-}
-
 // buf returns the worker's capture buffer, where packet data should be
 // written.  buf should only be called after the worker publishes itself
 // to the worker queue.
@@ -40,7 +24,7 @@ func (w *worker) buf() *capture.PacketBuffer {
 	return w.pb
 }
 
-// work begins work on the first count elements of the worker's capture buffer.
+// work begins work on the worker's capture buffer.
 func (w *worker) work() {
 	if w.pb.PacketLen() > 0 {
 		w.workReady <- struct{}{}

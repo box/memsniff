@@ -22,7 +22,6 @@ var (
 	bufferSize   = flag.IntP("buffersize", "b", 8, "MiB of kernel buffer for packet data")
 	ports        = flag.IntSliceP("ports", "p", []int{11211}, "memcached ports to listen on")
 
-	decodeWorkers   = flag.Int("decodeworkers", 8, "number of decode workers")
 	analysisWorkers = flag.Int("analysisworkers", 32, "number of analysis workers")
 	profiles        = flag.StringSlice("profile", []string{}, "profile types to store (one or more of cpu, heap, block)")
 
@@ -65,7 +64,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	decodePool := decode.NewPool(logger, *decodeWorkers, packetSource, packetHandler(analysisPool))
+	decodePool := decode.NewPool(logger, packetSource, packetHandler(analysisPool))
 	go decodePool.Run()
 
 	if *noGui {
@@ -92,10 +91,8 @@ func main() {
 	}
 }
 
-var stats presentation.Stats
-
 func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool, analysisPool *analysis.Pool) presentation.StatProvider {
-	return func() presentation.Stats {
+	return func() (stats presentation.Stats) {
 		captureStats, err := captureProvider.Stats()
 		if err == nil {
 			stats.PacketsEnteredFilter = captureStats.PacketsReceived
@@ -104,14 +101,13 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 
 		decodeStats := decodePool.Stats()
 		stats.PacketsCaptured = decodeStats.PacketsCaptured
-		stats.PacketsDroppedParser = decodeStats.PacketsDropped
 
 		analysisStats := analysisPool.Stats()
 		stats.ResponsesParsed = analysisStats.ResponsesHandled
 		stats.PacketsDroppedAnalysis = analysisStats.ResponsesDropped
 
 		stats.PacketsPassedFilter = stats.PacketsDroppedKernel + stats.PacketsCaptured
-		stats.PacketsDroppedTotal = stats.PacketsDroppedKernel + stats.PacketsDroppedParser + stats.PacketsDroppedAnalysis
+		stats.PacketsDroppedTotal = stats.PacketsDroppedKernel + stats.PacketsDroppedAnalysis
 
 		return stats
 	}
