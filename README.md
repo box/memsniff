@@ -1,6 +1,6 @@
 # Memsniff
 
-[![Project Status](http://opensource.box.com/badges/active.svg)](http://opensource.box.com/badges)
+[![Project Status](http://opensource.box.com/badges/active.svg)](http://opensource.box.com/badges)[![Build Status](https://travis-ci.org/box/memsniff.svg?branch=master)](https://travis-ci.org/box/memsniff)[![Go Report Card](https://goreportcard.com/badge/github.com/box/memsniff)](https://goreportcard.com/report/github.com/box/memsniff)
 
 Memsniff displays the busiest keys being retrieved from your memcache server.
 It has been inspired by the earlier [mctop](https://github.com/etsy/mctop) and
