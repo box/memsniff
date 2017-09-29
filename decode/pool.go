@@ -59,8 +59,7 @@ func (p *Pool) Run() {
 			}
 
 		default:
-			p.startWorker(p.numWorkers)
-			p.numWorkers++
+			p.startWorker()
 		}
 	}
 }
@@ -97,16 +96,17 @@ func (p *Pool) sendToWorker(w *worker) error {
 // or closed, which will clean up the goroutine.
 //
 // handler will be invoked on the Worker's background goroutine.
-func (p *Pool) startWorker(id int) worker {
+func (p *Pool) startWorker() {
 	d := newDecoder(p.logger, p.handler)
 	w := worker{
-		id:          id,
+		id:          p.numWorkers,
 		workerQueue: p.readyQ,
 		pb:          capture.NewPacketBuffer(batchSize, 8*1024*1024),
 		workReady:   make(chan struct{}, 1),
 		handler:     d.decodeBatch,
 	}
-	p.logger.Log("starting decode worker", id)
+	p.numWorkers++
+
+	p.logger.Log("starting decode worker", w.id)
 	go w.loop()
-	return w
 }
