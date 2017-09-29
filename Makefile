@@ -3,7 +3,7 @@ ldflags := -X "main.GitRivision=$(gitrev)"
 packages := $(shell go list ./... | grep -v memsniff/vendor)
 gometalinter := ${GOPATH}/bin/gometalinter.v1
 
-all: lint test
+all: test
 
 install:
 	go install -x -ldflags "$(ldflags)" $(packages)
