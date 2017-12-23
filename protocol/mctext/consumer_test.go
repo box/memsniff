@@ -1,10 +1,11 @@
 package mctext
 
 import (
-	"github.com/box/memsniff/assembly/reader"
+	"testing"
+
+	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/protocol/model"
 	"github.com/google/gopacket/tcpassembly"
-	"testing"
 )
 
 func TestTextMulti(t *testing.T) {
@@ -60,27 +61,15 @@ func testReadText(t *testing.T, lines []string, expected []model.Event) {
 			expected = expected[1:]
 		}
 	}
-	client, server := reader.NewPair()
-	r := Consumer{
-		Handler:      handler,
-		ClientReader: client,
-		ServerReader: server,
-	}
+	r := NewConsumer(&log.ConsoleLogger{}, handler)
 
-	done := make(chan struct{})
-	go func() {
-		r.Run()
-		close(done)
-	}()
-
-	r.ClientReader.Reassembled(reassemblyString("get key1 key2 key3\r\n"))
+	r.ClientStream().Reassembled(reassemblyString("get key1 key2 key3\r\n"))
 	for _, l := range lines {
-		r.ServerReader.Reassembled(reassemblyString(l + "\r\n"))
+		r.ServerStream().Reassembled(reassemblyString(l + "\r\n"))
 	}
-	r.ClientReader.ReassemblyComplete()
-	r.ServerReader.ReassemblyComplete()
+	r.ClientStream().ReassemblyComplete()
+	r.ServerStream().ReassemblyComplete()
 
-	<-done
 	if len(expected) > 0 {
 		t.Error("Expected", expected, "events but never received")
 	}

@@ -1,9 +1,10 @@
 package model
 
 import (
+	"io"
+
 	"github.com/box/memsniff/log"
 	"github.com/google/gopacket/tcpassembly"
-	"io"
 )
 
 // EventType described what sort of event has occurred.
@@ -18,10 +19,21 @@ const (
 	EventGetMiss
 )
 
+// Event is a single event in a datastore conversation
+type Event struct {
+	// Type of the event.
+	Type EventType
+	// Datastore key affected by this event.
+	Key string
+	// Size of the datastore value affected by this event.
+	Size int
+}
+
+// EventHandler consumes a batch of events.
+type EventHandler func(evts []Event)
+
 // Reader represents a subset of the bufio.Reader interface.
 type Reader interface {
-	io.Reader
-
 	// Discard skips the next n bytes, returning the number of bytes discarded.
 	// If Discard skips fewer than n bytes, it also returns an error.
 	Discard(n int) (discarded int, err error)
@@ -50,6 +62,9 @@ type ConsumerSource interface {
 	tcpassembly.Stream
 }
 
+// State is a function to be called to process buffered data in a particular connection state.
+type State func() error
+
 // Consumer is a generic reader of a datastore conversation.
 type Consumer struct {
 	// A Logger instance for debugging.  No logging is done if nil.
@@ -60,6 +75,9 @@ type Consumer struct {
 	ClientReader ConsumerSource
 	// ServerReader exposes data send by the server to the client.
 	ServerReader ConsumerSource
+
+	Run   func()
+	State State
 
 	eventBuf []Event
 }
@@ -79,15 +97,36 @@ func (c *Consumer) FlushEvents() {
 	c.eventBuf = c.eventBuf[:0]
 }
 
-// Event is a single event in a datastore conversation
-type Event struct {
-	// Type of the event.
-	Type EventType
-	// Datastore key affected by this event.
-	Key string
-	// Size of the datastore value affected by this event.
-	Size int
+func (c *Consumer) ClientStream() tcpassembly.Stream {
+	return (*ClientStream)(c)
 }
 
-// EventHandler consumes a batch of events.
-type EventHandler func(evts []Event)
+func (c *Consumer) ServerStream() tcpassembly.Stream {
+	return (*ServerStream)(c)
+}
+
+// ClientStream is a view on a Consumer that consumes tcpassembly data from the client
+type ClientStream Consumer
+
+func (cs *ClientStream) Reassembled(rs []tcpassembly.Reassembly) {
+	cs.ClientReader.Reassembled(rs)
+	(*Consumer)(cs).Run()
+}
+
+func (cs *ClientStream) ReassemblyComplete() {
+	cs.ClientReader.ReassemblyComplete()
+	(*Consumer)(cs).FlushEvents()
+}
+
+// ServerStream is a view on a Consumer that consumes tcpassembly data from the server
+type ServerStream Consumer
+
+func (ss *ServerStream) Reassembled(rs []tcpassembly.Reassembly) {
+	ss.ServerReader.Reassembled(rs)
+	(*Consumer)(ss).Run()
+}
+
+func (ss *ServerStream) ReassemblyComplete() {
+	ss.ServerReader.ReassemblyComplete()
+	(*Consumer)(ss).FlushEvents()
+}
