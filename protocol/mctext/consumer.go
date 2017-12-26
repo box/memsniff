@@ -32,26 +32,29 @@ func NewConsumer(logger log.Logger, handler model.EventHandler) *model.Consumer 
 func (c *Consumer) run() {
 	for {
 		err := c.State()
-		if err == gapbuffer.ErrShortRead {
+		switch err {
+		case nil:
+			continue
+		case gapbuffer.ErrShortRead:
 			return
-		}
-		if err != nil {
+		case io.ErrShortWrite:
+			c.log("buffer overrun")
+			c.ClientReader.Close()
+			c.ServerReader.Close()
+			c.Run = func() {}
+			return
+		default:
 			// data lost or protocol error, try to resync at the next command
 			c.log(err)
 			c.log("trying to resync")
-			c.reset()
 			c.State = c.readCommand
 			return
 		}
 	}
 }
 
-func (c *Consumer) reset() {
-	c.ServerReader.Clear()
-}
-
 func (c *Consumer) readCommand() error {
-	c.log("reading command")
+	// c.ServerReader.Reset()
 	line, err := c.ClientReader.ReadLine()
 	if err != nil {
 		return err
@@ -61,7 +64,6 @@ func (c *Consumer) readCommand() error {
 	fields := bytes.Split(line, []byte(" "))
 	if len(fields) <= 0 {
 		c.log("malformed command")
-		c.reset()
 		return nil
 	}
 

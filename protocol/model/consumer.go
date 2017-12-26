@@ -60,6 +60,7 @@ type ConsumerSource interface {
 	Reader
 	io.Closer
 	tcpassembly.Stream
+	Reset()
 }
 
 // State is a function to be called to process buffered data in a particular connection state.

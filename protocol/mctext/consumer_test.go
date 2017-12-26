@@ -52,6 +52,21 @@ func TestTextIncompleteBody(t *testing.T) {
 	})
 }
 
+func TestClientOverrun(t *testing.T) {
+	r := NewConsumer(&log.ConsoleLogger{}, nil)
+	var data [1024]byte
+	for i := 0; i < 1024; i++ {
+		r.ClientStream().Reassembled(reassemblyString(string(data[:])))
+	}
+}
+func TestServerOverrun(t *testing.T) {
+	r := NewConsumer(&log.ConsoleLogger{}, nil)
+	var data [1024]byte
+	for i := 0; i < 1024; i++ {
+		r.ServerStream().Reassembled(reassemblyString(string(data[:])))
+	}
+}
+
 func testReadText(t *testing.T, lines []string, expected []model.Event) {
 	handler := func(evts []model.Event) {
 		for _, e := range evts {

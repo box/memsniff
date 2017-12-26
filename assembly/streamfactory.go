@@ -90,9 +90,9 @@ func (sf *streamFactory) New(netFlow, transportFlow gopacket.Flow) tcpassembly.S
 
 	var stream tcpassembly.Stream
 	if fromServer {
-		stream = c.ServerStream
+		stream = c.ServerStream()
 	} else {
-		stream = c.ClientStream
+		stream = c.ClientStream()
 	}
 
 	return stream
