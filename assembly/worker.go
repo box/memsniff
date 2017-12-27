@@ -2,12 +2,13 @@ package assembly
 
 import (
 	"errors"
+	"time"
+
 	"github.com/box/memsniff/analysis"
 	"github.com/box/memsniff/decode"
 	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/protocol/model"
 	"github.com/google/gopacket/tcpassembly"
-	"time"
 )
 
 var (
@@ -70,7 +71,7 @@ func (w worker) loop() {
 				return
 			}
 			for _, dp := range wi.dps {
-				w.assembler.Assemble(dp.NetFlow, &dp.TCP)
+				w.assembler.AssembleWithTimestamp(dp.NetFlow, &dp.TCP, dp.Info.Timestamp)
 			}
 			wi.doneCh <- struct{}{}
 		}
