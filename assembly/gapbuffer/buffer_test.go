@@ -195,6 +195,13 @@ func TestDiscardPartialGap(t *testing.T) {
 	testReadN(t, b, "el", 2)
 }
 
+func TestDiscardUpdatesBlockLength(t *testing.T) {
+	b := New(8)
+	b.Write(0, []byte("hello\r\n"))
+	b.Discard(2)
+	b.ReadLine()
+}
+
 func testReadN(t *testing.T, b *Buffer, expect string, remain int) {
 	o, err := b.ReadN(len(expect))
 	if err != nil {

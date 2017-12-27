@@ -2,6 +2,7 @@ package gapbuffer
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 )
 
@@ -123,6 +124,19 @@ func (b *Buffer) contiguousAvailable() (avail int) {
 	return
 }
 
+func (b *Buffer) totalData() (avail int) {
+	for _, block := range b.blocks {
+		avail += block.dataLen
+	}
+	return
+}
+
+func (b *Buffer) validate() {
+	if b.totalData() != b.buf.Len() {
+		panic(fmt.Sprintln(b.totalData(), b.buf.Len()))
+	}
+}
+
 func (b *Buffer) discardToGap() (gapSize int) {
 	for i, block := range b.blocks {
 		gapSize = block.gap
@@ -182,5 +196,6 @@ func (b *block) discard(buf *Buffer, n int) {
 	}
 	n -= b.gap
 	b.gap = 0
+	b.dataLen -= n
 	buf.buf.Next(n)
 }
