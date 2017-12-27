@@ -4,7 +4,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/box/memsniff/assembly/gapbuffer"
+	"github.com/box/memsniff/assembly/reader"
 	"github.com/box/memsniff/log"
 	"github.com/google/gopacket/tcpassembly"
 )
@@ -22,7 +22,7 @@ const (
 )
 
 var (
-	bufferPool = sync.Pool{New: func() interface{} { return gapbuffer.NewStream() }}
+	bufferPool = sync.Pool{New: func() interface{} { return reader.New() }}
 	eofSource  = DummySource{}
 )
 

@@ -1,4 +1,4 @@
-package gapbuffer
+package reader
 
 import (
 	"bytes"

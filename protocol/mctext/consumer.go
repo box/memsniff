@@ -5,7 +5,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/box/memsniff/assembly/gapbuffer"
+	"github.com/box/memsniff/assembly/reader"
 	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/protocol/model"
 )
@@ -30,7 +30,7 @@ func (c *Consumer) run() {
 		switch err {
 		case nil:
 			continue
-		case gapbuffer.ErrShortRead:
+		case reader.ErrShortRead:
 			return
 		case io.ErrShortWrite:
 			c.log("buffer overrun")

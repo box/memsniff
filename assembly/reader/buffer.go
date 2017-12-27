@@ -1,4 +1,4 @@
-package gapbuffer
+package reader
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ type Buffer struct {
 	discard int
 }
 
-func New(cap int) *Buffer {
+func NewBuffer(cap int) *Buffer {
 	return &Buffer{
 		cap: cap,
 	}
