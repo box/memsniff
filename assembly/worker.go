@@ -58,10 +58,11 @@ func (w worker) handlePackets(dps []*decode.DecodedPacket, doneCh chan<- struct{
 
 func (w worker) loop() {
 	ticker := time.NewTicker(time.Second)
+	var mostRecent time.Time
 	for {
 		select {
 		case <-ticker.C:
-			f, c := w.assembler.FlushOlderThan(time.Now().Add(-time.Minute))
+			f, c := w.assembler.FlushOlderThan(mostRecent.Add(-time.Minute))
 			if f > 0 || c > 0 {
 				w.log("Flushed", f, "Closed", c)
 			}
@@ -71,7 +72,8 @@ func (w worker) loop() {
 				return
 			}
 			for _, dp := range wi.dps {
-				w.assembler.AssembleWithTimestamp(dp.NetFlow, &dp.TCP, dp.Info.Timestamp)
+				mostRecent = dp.Info.Timestamp
+				w.assembler.AssembleWithTimestamp(dp.NetFlow, &dp.TCP, mostRecent)
 			}
 			wi.doneCh <- struct{}{}
 		}
