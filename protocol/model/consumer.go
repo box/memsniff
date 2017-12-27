@@ -2,7 +2,9 @@ package model
 
 import (
 	"io"
+	"sync"
 
+	"github.com/box/memsniff/assembly/gapbuffer"
 	"github.com/box/memsniff/log"
 	"github.com/google/gopacket/tcpassembly"
 )
@@ -17,6 +19,11 @@ const (
 	EventGetHit
 	// EventGetMiss is a data retrieval that did not result in data.
 	EventGetMiss
+)
+
+var (
+	bufferPool = sync.Pool{New: func() interface{} { return gapbuffer.NewStream() }}
+	eofSource  = DummySource{}
 )
 
 // Event is a single event in a datastore conversation
@@ -83,9 +90,18 @@ type Consumer struct {
 	eventBuf []Event
 }
 
+func New(logger log.Logger, handler EventHandler) *Consumer {
+	return &Consumer{
+		Logger:       logger,
+		Handler:      handler,
+		ClientReader: bufferPool.Get().(ConsumerSource),
+		ServerReader: bufferPool.Get().(ConsumerSource),
+	}
+}
+
 func (c *Consumer) AddEvent(evt Event) {
 	if c.eventBuf == nil {
-		c.eventBuf = make([]Event, 0, 128)
+		c.eventBuf = make([]Event, 0, 8)
 	}
 	c.eventBuf = append(c.eventBuf, evt)
 	if len(c.eventBuf) == cap(c.eventBuf) {
@@ -117,6 +133,8 @@ func (cs *ClientStream) Reassembled(rs []tcpassembly.Reassembly) {
 func (cs *ClientStream) ReassemblyComplete() {
 	cs.ClientReader.ReassemblyComplete()
 	(*Consumer)(cs).FlushEvents()
+	bufferPool.Put(cs.ClientReader)
+	cs.ClientReader = &eofSource
 }
 
 // ServerStream is a view on a Consumer that consumes tcpassembly data from the server
@@ -130,4 +148,6 @@ func (ss *ServerStream) Reassembled(rs []tcpassembly.Reassembly) {
 func (ss *ServerStream) ReassemblyComplete() {
 	ss.ServerReader.ReassemblyComplete()
 	(*Consumer)(ss).FlushEvents()
+	bufferPool.Put(ss.ServerReader)
+	ss.ServerReader = &eofSource
 }

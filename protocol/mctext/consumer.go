@@ -18,15 +18,10 @@ const (
 type Consumer model.Consumer
 
 func NewConsumer(logger log.Logger, handler model.EventHandler) *model.Consumer {
-	c := &Consumer{
-		Logger:       logger,
-		Handler:      handler,
-		ClientReader: gapbuffer.NewStream(),
-		ServerReader: gapbuffer.NewStream(),
-	}
-	c.Run = c.run
-	c.State = c.readCommand
-	return (*model.Consumer)(c)
+	c := model.New(logger, handler)
+	c.Run = (*Consumer)(c).run
+	c.State = (*Consumer)(c).readCommand
+	return c
 }
 
 func (c *Consumer) run() {
