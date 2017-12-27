@@ -4,6 +4,10 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"time"
+
 	"github.com/box/memsniff/analysis"
 	"github.com/box/memsniff/assembly"
 	"github.com/box/memsniff/capture"
@@ -11,9 +15,6 @@ import (
 	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/presentation"
 	flag "github.com/spf13/pflag"
-	"os"
-	"os/signal"
-	"time"
 )
 
 var (
@@ -66,7 +67,11 @@ func main() {
 	}
 
 	decodePool := decode.NewPool(logger, packetSource, packetHandler(analysisPool))
-	go decodePool.Run()
+	eofChan := make(chan struct{}, 1)
+	go func() {
+		decodePool.Run()
+		eofChan <- struct{}{}
+	}()
 
 	if *noGui {
 		logger.SetLogger(log.ConsoleLogger{})
@@ -74,7 +79,10 @@ func main() {
 
 		exitChan := make(chan os.Signal, 1)
 		signal.Notify(exitChan, os.Interrupt)
-		<-exitChan
+		select {
+		case <-exitChan:
+		case <-eofChan:
+		}
 	} else {
 		updateInterval := time.Duration(*interval) * time.Second
 		statProvider := statGenerator(packetSource, decodePool, analysisPool)
