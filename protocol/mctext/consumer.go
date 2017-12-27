@@ -30,7 +30,7 @@ func (c *Consumer) run() {
 		switch err {
 		case nil:
 			continue
-		case reader.ErrShortRead:
+		case reader.ErrShortRead, io.EOF:
 			return
 		case io.ErrShortWrite:
 			c.log("buffer overrun")
@@ -49,9 +49,12 @@ func (c *Consumer) run() {
 }
 
 func (c *Consumer) readCommand() error {
-	// c.ServerReader.Reset()
+	c.ServerReader.Truncate()
 	line, err := c.ClientReader.ReadLine()
 	if err != nil {
+		if _, ok := err.(reader.ErrLostData); ok {
+			c.ClientReader.Truncate()
+		}
 		return err
 	}
 
@@ -133,6 +136,7 @@ func (c *Consumer) handleSet(fields [][]byte) error {
 }
 
 func (c *Consumer) discardResponse() error {
+	c.State = c.discardResponse
 	line, err := c.ServerReader.ReadLine()
 	if err != nil {
 		return err

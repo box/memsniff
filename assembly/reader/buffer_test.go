@@ -7,7 +7,7 @@ import (
 )
 
 func TestWriteOverrun(t *testing.T) {
-	b := New(8)
+	b := NewBuffer(8)
 	err := b.Write(0, []byte("hello world"))
 	if err != io.ErrShortWrite {
 		t.Fail()
@@ -15,7 +15,7 @@ func TestWriteOverrun(t *testing.T) {
 }
 
 func TestReadLine(t *testing.T) {
-	b := New(128)
+	b := NewBuffer(128)
 	b.Write(0, []byte("hello\nworld\n"))
 
 	o, err := b.ReadLine()
@@ -42,7 +42,7 @@ func TestReadLine(t *testing.T) {
 }
 
 func TestReadLineAcrossBlocks(t *testing.T) {
-	b := New(128)
+	b := NewBuffer(128)
 	b.Write(0, []byte("hel"))
 	b.Write(0, []byte("lo\n"))
 
@@ -59,7 +59,7 @@ func TestReadLineAcrossBlocks(t *testing.T) {
 }
 
 func TestReadIncompleteLineIsNoop(t *testing.T) {
-	b := New(128)
+	b := NewBuffer(128)
 	b.Write(0, []byte("hello world"))
 	o, err := b.ReadLine()
 	if o != nil {
@@ -73,8 +73,8 @@ func TestReadIncompleteLineIsNoop(t *testing.T) {
 	}
 }
 
-func TestDiscardNewWrites(t *testing.T) {
-	b := New(128)
+func TestDiscardNewBufferWrites(t *testing.T) {
+	b := NewBuffer(128)
 	b.Discard(3)
 	b.Write(0, []byte("hello"))
 
@@ -82,7 +82,7 @@ func TestDiscardNewWrites(t *testing.T) {
 }
 
 func TestDiscardOverGap(t *testing.T) {
-	b := New(128)
+	b := NewBuffer(128)
 	b.Write(2, []byte("rld"))
 	b.Discard(3)
 
@@ -90,7 +90,7 @@ func TestDiscardOverGap(t *testing.T) {
 }
 
 func TestDiscardMultipleBlocks(t *testing.T) {
-	b := New(128)
+	b := NewBuffer(128)
 	b.Write(2, nil)
 	b.Write(2, nil)
 	b.Write(0, []byte("hello"))
@@ -100,7 +100,7 @@ func TestDiscardMultipleBlocks(t *testing.T) {
 }
 
 func TestDiscardBeforeWriteMultiple(t *testing.T) {
-	b := New(128)
+	b := NewBuffer(128)
 	b.Discard(5)
 	b.Write(2, nil)
 	b.Write(2, nil)
@@ -110,7 +110,7 @@ func TestDiscardBeforeWriteMultiple(t *testing.T) {
 }
 
 func TestReadNHitsGap(t *testing.T) {
-	b := New(128)
+	b := NewBuffer(128)
 	b.Write(0, []byte("hello"))
 	b.Write(2, []byte("orld"))
 
@@ -127,7 +127,7 @@ func TestReadNHitsGap(t *testing.T) {
 }
 
 func TestReadLineThroughGap(t *testing.T) {
-	b := New(128)
+	b := NewBuffer(128)
 	b.Write(0, []byte("hello"))
 	b.Write(2, []byte("orld\r\n"))
 
@@ -152,7 +152,7 @@ func TestReadLineThroughGap(t *testing.T) {
 }
 
 func TestReadAcrossRingBufferWrap(t *testing.T) {
-	b := New(8)
+	b := NewBuffer(8)
 	b.Write(0, []byte("hello"))
 	b.Discard(4)
 	b.Write(0, []byte("wor\nld"))
@@ -169,7 +169,7 @@ func TestReadAcrossRingBufferWrap(t *testing.T) {
 }
 
 func TestDiscardAcrossRingBufferWrap(t *testing.T) {
-	b := New(8)
+	b := NewBuffer(8)
 	b.Write(0, []byte("hello"))
 	b.Discard(4)
 	b.Write(0, []byte("world"))
@@ -178,7 +178,7 @@ func TestDiscardAcrossRingBufferWrap(t *testing.T) {
 }
 
 func TestDiscardEntireSplitBlock(t *testing.T) {
-	b := New(8)
+	b := NewBuffer(8)
 	b.Write(0, []byte("hello"))
 	b.Discard(4)
 	b.Write(0, []byte("worl"))
@@ -188,7 +188,7 @@ func TestDiscardEntireSplitBlock(t *testing.T) {
 }
 
 func TestDiscardPartialGap(t *testing.T) {
-	b := New(8)
+	b := NewBuffer(8)
 	b.Write(4, []byte("hello"))
 	b.Discard(2)
 	b.Discard(3)
@@ -196,7 +196,7 @@ func TestDiscardPartialGap(t *testing.T) {
 }
 
 func TestDiscardUpdatesBlockLength(t *testing.T) {
-	b := New(8)
+	b := NewBuffer(8)
 	b.Write(0, []byte("hello\r\n"))
 	b.Discard(2)
 	b.ReadLine()

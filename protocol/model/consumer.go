@@ -60,6 +60,12 @@ type Reader interface {
 	// The text returned from ReadLine does not include the line end ("\r\n" or "\n").
 	// No indication or error is given if the input ends without a final line end.
 	ReadLine() ([]byte, error)
+
+	// Reset discards all state, preparing the Reader to receive data from a new connection.
+	Reset()
+
+	// Truncate discards all buffered data from the reader, leaving other state intact.
+	Truncate()
 }
 
 // ConsumerSource buffers tcpassembly.Stream data and exposes it as a closeable Reader.
@@ -67,7 +73,6 @@ type ConsumerSource interface {
 	Reader
 	io.Closer
 	tcpassembly.Stream
-	Reset()
 }
 
 // State is a function to be called to process buffered data in a particular connection state.
@@ -133,6 +138,7 @@ func (cs *ClientStream) Reassembled(rs []tcpassembly.Reassembly) {
 func (cs *ClientStream) ReassemblyComplete() {
 	cs.ClientReader.ReassemblyComplete()
 	(*Consumer)(cs).FlushEvents()
+	cs.ClientReader.Reset()
 	bufferPool.Put(cs.ClientReader)
 	cs.ClientReader = &eofSource
 }
@@ -148,6 +154,7 @@ func (ss *ServerStream) Reassembled(rs []tcpassembly.Reassembly) {
 func (ss *ServerStream) ReassemblyComplete() {
 	ss.ServerReader.ReassemblyComplete()
 	(*Consumer)(ss).FlushEvents()
+	ss.ServerReader.Reset()
 	bufferPool.Put(ss.ServerReader)
 	ss.ServerReader = &eofSource
 }

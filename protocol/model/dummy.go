@@ -8,11 +8,9 @@ import (
 
 type DummySource struct{}
 
-func (s *DummySource) Reassembled(rs []tcpassembly.Reassembly) {
-}
+func (s *DummySource) Reassembled(rs []tcpassembly.Reassembly) {}
 
-func (s *DummySource) ReassemblyComplete() {
-}
+func (s *DummySource) ReassemblyComplete() {}
 
 func (s *DummySource) Discard(n int) (discarded int, err error) {
 	return 0, nil
@@ -34,5 +32,6 @@ func (s *DummySource) Close() error {
 	return nil
 }
 
-func (s *DummySource) Reset() {
-}
+func (s *DummySource) Reset() {}
+
+func (s *DummySource) Truncate() {}

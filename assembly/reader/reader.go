@@ -43,6 +43,13 @@ func (r *Reader) ReassemblyComplete() {
 
 func (r *Reader) Reset() {
 	r.buf.Reset()
+	r.closed = false
+	r.eof = false
+	r.err = nil
+}
+
+func (r *Reader) Truncate() {
+	r.buf.Reset()
 }
 
 func (r *Reader) Discard(n int) (discarded int, err error) {
@@ -89,6 +96,6 @@ func (r *Reader) ReadLine() (out []byte, err error) {
 
 func (r *Reader) Close() error {
 	r.closed = true
-	r.buf = Buffer{}
+	r.buf.Reset()
 	return nil
 }
