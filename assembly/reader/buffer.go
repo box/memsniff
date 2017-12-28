@@ -68,25 +68,37 @@ func (b *Buffer) ReadN(n int) (out []byte, err error) {
 	if b.len < n {
 		return nil, ErrShortRead
 	}
-	avail := b.contiguousAvailable()
+	avail, gap := b.contiguousAvailable()
 	if avail < n {
 		out = b.buf.Bytes()[:avail]
-		gapSize := b.discardToGap()
-		return out, ErrLostData{gapSize}
+		b.Discard(avail + gap)
+		return out, ErrLostData{gap}
 	}
 	out = b.buf.Bytes()[:n]
 	b.Discard(n)
 	return
 }
 
+func (b *Buffer) PeekN(n int) (out []byte, err error) {
+	if b.len < n {
+		return nil, ErrShortRead
+	}
+	avail, gap := b.contiguousAvailable()
+	if avail < n {
+		out = b.buf.Bytes()[:avail]
+		return out, ErrLostData{gap}
+	}
+	out = b.buf.Bytes()[:n]
+	return
+}
+
 func (b *Buffer) ReadLine() (out []byte, err error) {
-	avail := b.contiguousAvailable()
-	hasGap := avail < b.len
+	avail, gap := b.contiguousAvailable()
 	pos := bytes.IndexByte(b.buf.Bytes()[:avail], '\n')
 	if pos < 0 {
-		if hasGap {
-			gapSize := b.discardToGap()
-			return nil, ErrLostData{gapSize}
+		if avail < b.len {
+			b.Discard(avail + gap)
+			return nil, ErrLostData{gap}
 		}
 		return nil, ErrShortRead
 	}
@@ -118,10 +130,10 @@ func (b *Buffer) Discard(n int) {
 	b.discard += toDiscard
 }
 
-func (b *Buffer) contiguousAvailable() (avail int) {
+func (b *Buffer) contiguousAvailable() (avail int, gap int) {
 	for _, block := range b.blocks {
 		if block.hasGap() {
-			return
+			return avail, block.gap
 		}
 		avail += block.dataLen
 	}
@@ -139,19 +151,6 @@ func (b *Buffer) validate() {
 	if b.totalData() != b.buf.Len() {
 		panic(fmt.Sprintln(b.totalData(), b.buf.Len()))
 	}
-}
-
-func (b *Buffer) discardToGap() (gapSize int) {
-	for i, block := range b.blocks {
-		gapSize = block.gap
-		if gapSize > 0 {
-			b.len -= gapSize
-			b.blocks[i].gap = 0
-			b.dropBlocks(i)
-			return
-		}
-	}
-	return
 }
 
 func (b *Buffer) dropBlocks(n int) {

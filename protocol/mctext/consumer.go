@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	crlf = "\r\n"
+	crlf       = "\r\n"
+	debuglevel = 3
 )
 
 // Consumer generates events based on a memcached text protocol conversation.
@@ -20,7 +21,7 @@ type Consumer model.Consumer
 func NewConsumer(logger log.Logger, handler model.EventHandler) *model.Consumer {
 	c := model.New(logger, handler)
 	c.Run = (*Consumer)(c).run
-	c.State = (*Consumer)(c).readCommand
+	c.State = (*Consumer)(c).peekMagicByte
 	return c
 }
 
@@ -33,23 +34,43 @@ func (c *Consumer) run() {
 		case reader.ErrShortRead, io.EOF:
 			return
 		case io.ErrShortWrite:
-			c.log("buffer overrun")
-			c.ClientReader.Close()
-			c.ServerReader.Close()
-			c.Run = func() {}
+			c.log(1, "buffer overrun, abandoning connection")
+			(*model.Consumer)(c).Close()
+			panic("buffer overrun")
 			return
 		default:
 			// data lost or protocol error, try to resync at the next command
-			c.log(err)
-			c.log("trying to resync")
+			// c.log(err)
+			// c.log("trying to resync")
 			c.State = c.readCommand
 			return
 		}
 	}
 }
 
+func (c *Consumer) peekMagicByte() error {
+	firstByte, err := c.ClientReader.PeekN(1)
+	if err != nil {
+		if _, ok := err.(reader.ErrLostData); ok {
+			// try again, making sure we read from the start of a client packet.
+			c.ClientReader.Truncate()
+			err = reader.ErrShortRead
+		}
+		return err
+	}
+	if firstByte[0] == 0x80 {
+		//binary memcached protocol, don't try to handle this connection
+		c.log(2, "looks like binary protocol, ignoring connection")
+		(*model.Consumer)(c).Close()
+		return io.EOF
+	}
+	c.State = c.readCommand
+	return nil
+}
+
 func (c *Consumer) readCommand() error {
 	c.ServerReader.Truncate()
+	c.log(3, "reading command")
 	line, err := c.ClientReader.ReadLine()
 	if err != nil {
 		if _, ok := err.(reader.ErrLostData); ok {
@@ -58,13 +79,13 @@ func (c *Consumer) readCommand() error {
 		return err
 	}
 
-	c.log("read command:", string(line))
 	fields := bytes.Split(line, []byte(" "))
 	if len(fields) <= 0 {
-		c.log("malformed command")
+		// c.log("malformed command")
 		return nil
 	}
 
+	c.log(3, "read command:", string(line))
 	switch string(fields[0]) {
 	case "get", "gets":
 		c.State = func() error { return c.handleGet(fields[1:]) }
@@ -85,12 +106,12 @@ func (c *Consumer) handleGet(keys [][]byte) error {
 		return c.discardResponse()
 	}
 	for {
-		c.log("awaiting server reply to get")
+		c.log(3, "awaiting server reply to get")
 		line, err := c.ServerReader.ReadLine()
 		if err != nil {
 			return err
 		}
-		c.log("server reply:", string(line))
+		c.log(3, "server reply:", string(line))
 		fields := bytes.Split(line, []byte(" "))
 		if len(fields) >= 4 && bytes.Equal(fields[0], []byte("VALUE")) {
 			key := fields[1]
@@ -103,14 +124,14 @@ func (c *Consumer) handleGet(keys [][]byte) error {
 				Key:  string(key),
 				Size: size,
 			}
-			c.log("sending event:", evt)
+			// c.log("sending event:", evt)
 			c.addEvent(evt)
-			c.log("discarding value")
+			// c.log("discarding value")
 			_, err = c.ServerReader.Discard(size + len(crlf))
 			if err != nil {
 				return err
 			}
-			c.log("discarded value")
+			// c.log("discarded value")
 		} else {
 			c.State = c.readCommand
 			return nil
@@ -126,22 +147,23 @@ func (c *Consumer) handleSet(fields [][]byte) error {
 	if err != nil {
 		return c.discardResponse()
 	}
-	c.log("discarding", size+len(crlf), "from client")
+	c.log(3, "discarding", size+len(crlf), "from client")
 	_, err = c.ClientReader.Discard(size + len(crlf))
 	if err != nil {
 		return err
 	}
-	c.log("discarding response from server")
+	c.log(3, "discarding response from server")
 	return c.discardResponse()
 }
 
 func (c *Consumer) discardResponse() error {
 	c.State = c.discardResponse
+	c.log(3, "discarding response from server")
 	line, err := c.ServerReader.ReadLine()
 	if err != nil {
 		return err
 	}
-	c.log("discarded response from server:", string(line))
+	c.log(3, "discarded response from server:", string(line))
 	c.State = c.readCommand
 	return nil
 }
@@ -150,8 +172,8 @@ func (c *Consumer) addEvent(evt model.Event) {
 	(*model.Consumer)(c).AddEvent(evt)
 }
 
-func (c *Consumer) log(items ...interface{}) {
-	if c.Logger != nil {
+func (c *Consumer) log(level int, items ...interface{}) {
+	if c.Logger != nil && debuglevel >= level {
 		c.Logger.Log(items...)
 	}
 }

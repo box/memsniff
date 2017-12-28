@@ -208,6 +208,19 @@ func TestSkipAtStart(t *testing.T) {
 	testReadN(t, b, "hello", 0)
 }
 
+func TestPeekN(t *testing.T) {
+	b := NewBuffer(8)
+	b.Write(0, []byte("hello"))
+	out, err := b.PeekN(3)
+	if err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(out, []byte("hel")) {
+		t.Error(string(out), "hel")
+	}
+	testReadN(t, b, "hello", 0)
+}
+
 func testReadN(t *testing.T, b *Buffer, expect string, remain int) {
 	o, err := b.ReadN(len(expect))
 	if err != nil {

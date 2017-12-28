@@ -23,7 +23,7 @@ const (
 
 var (
 	bufferPool = sync.Pool{New: func() interface{} { return reader.New() }}
-	eofSource  = DummySource{}
+	eofSource  = &DummySource{}
 )
 
 // Event is a single event in a datastore conversation
@@ -52,6 +52,14 @@ type Reader interface {
 	//
 	// The returned buffer is only valid until the next call to ReadN or ReadLine.
 	ReadN(n int) ([]byte, error)
+
+	// PeekN returns the next n bytes, not advancing the read cursor.
+	//
+	// If EOF is encountered before reading n bytes, the available bytes are returned
+	// along with ErrUnexpectedEOF.
+	//
+	// The returned buffer is only valid until the next call to ReadN or ReadLine.
+	PeekN(n int) ([]byte, error)
 
 	// ReadLine returns a single line, not including the end-of-line bytes.
 	// The returned buffer is only valid until the next call to ReadN or ReadLine.
@@ -119,6 +127,20 @@ func (c *Consumer) FlushEvents() {
 	c.eventBuf = c.eventBuf[:0]
 }
 
+func (c *Consumer) Close() {
+	if c.ClientReader != eofSource {
+		c.ClientReader.Reset()
+		bufferPool.Put(c.ClientReader)
+		c.ClientReader = eofSource
+	}
+	if c.ServerReader != eofSource {
+		c.ServerReader.Reset()
+		bufferPool.Put(c.ServerReader)
+		c.ServerReader = eofSource
+	}
+	c.Run = func() {}
+}
+
 func (c *Consumer) ClientStream() tcpassembly.Stream {
 	return (*ClientStream)(c)
 }
@@ -142,7 +164,7 @@ func (cs *ClientStream) ReassemblyComplete() {
 	(*Consumer)(cs).FlushEvents()
 	cs.ClientReader.Reset()
 	bufferPool.Put(cs.ClientReader)
-	cs.ClientReader = &eofSource
+	cs.ClientReader = eofSource
 }
 
 // ServerStream is a view on a Consumer that consumes tcpassembly data from the server
@@ -160,5 +182,5 @@ func (ss *ServerStream) ReassemblyComplete() {
 	(*Consumer)(ss).FlushEvents()
 	ss.ServerReader.Reset()
 	bufferPool.Put(ss.ServerReader)
-	ss.ServerReader = &eofSource
+	ss.ServerReader = eofSource
 }

@@ -20,6 +20,10 @@ func (s *DummySource) ReadN(n int) ([]byte, error) {
 	return nil, io.EOF
 }
 
+func (s *DummySource) PeekN(n int) ([]byte, error) {
+	return nil, io.EOF
+}
+
 func (s *DummySource) ReadLine() ([]byte, error) {
 	return nil, io.EOF
 }
