@@ -29,6 +29,10 @@ func (b *Buffer) Reset() {
 }
 
 func (b *Buffer) Write(skip int, data []byte) error {
+	if skip < 0 {
+		// starting mid-conversation
+		skip = 0
+	}
 	if b.discard >= skip+len(data) {
 		// discard all of data
 		b.discard = b.discard - skip - len(data)

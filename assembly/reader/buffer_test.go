@@ -202,6 +202,12 @@ func TestDiscardUpdatesBlockLength(t *testing.T) {
 	b.ReadLine()
 }
 
+func TestSkipAtStart(t *testing.T) {
+	b := NewBuffer(8)
+	b.Write(-1, []byte("hello"))
+	testReadN(t, b, "hello", 0)
+}
+
 func testReadN(t *testing.T, b *Buffer, expect string, remain int) {
 	o, err := b.ReadN(len(expect))
 	if err != nil {
