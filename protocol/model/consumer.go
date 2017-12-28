@@ -131,8 +131,10 @@ func (c *Consumer) ServerStream() tcpassembly.Stream {
 type ClientStream Consumer
 
 func (cs *ClientStream) Reassembled(rs []tcpassembly.Reassembly) {
-	cs.ClientReader.Reassembled(rs)
-	(*Consumer)(cs).Run()
+	for _, r := range rs {
+		cs.ClientReader.Reassembled([]tcpassembly.Reassembly{r})
+		(*Consumer)(cs).Run()
+	}
 }
 
 func (cs *ClientStream) ReassemblyComplete() {
@@ -147,8 +149,10 @@ func (cs *ClientStream) ReassemblyComplete() {
 type ServerStream Consumer
 
 func (ss *ServerStream) Reassembled(rs []tcpassembly.Reassembly) {
-	ss.ServerReader.Reassembled(rs)
-	(*Consumer)(ss).Run()
+	for _, r := range rs {
+		ss.ServerReader.Reassembled([]tcpassembly.Reassembly{r})
+		(*Consumer)(ss).Run()
+	}
 }
 
 func (ss *ServerStream) ReassemblyComplete() {
