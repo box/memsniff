@@ -68,7 +68,7 @@ func (c *Consumer) readCommand() error {
 	switch string(fields[0]) {
 	case "get", "gets":
 		c.State = func() error { return c.handleGet(fields[1:]) }
-	case "set", "add", "replace", "append", "prepend":
+	case "set", "add", "replace", "append", "prepend", "cas":
 		c.State = func() error { return c.handleSet(fields[1:]) }
 	case "quit":
 		c.ClientReader.Close()
