@@ -88,7 +88,7 @@ func (c *Consumer) readCommand() error {
 		return err
 	}
 	c.cmd = string(bytes.TrimRight(cmd, " \r\n"))
-
+	c.log(3, "read command:", c.cmd)
 	c.args = c.args[:0]
 	if c.commandState() != nil {
 		c.State = c.readArgs
@@ -113,6 +113,7 @@ func (c *Consumer) commandState() model.State {
 }
 
 func (c *Consumer) readArgs() error {
+	c.ServerReader.Truncate()
 	pos, err := c.ClientReader.IndexAny(" \n")
 	if err != nil {
 		return err
@@ -121,11 +122,12 @@ func (c *Consumer) readArgs() error {
 	if err != nil {
 		return err
 	}
-	c.args = append(c.args, string(word[:len(word)-1]))
+	c.args = append(c.args, string(bytes.TrimRight(word[:len(word)-1], "\r")))
 	delim := word[len(word)-1]
 	if delim == ' ' {
 		return nil
 	}
+	c.log(3, "read arguments:", c.args)
 	c.State = c.commandState()
 	return nil
 }
