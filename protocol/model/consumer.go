@@ -53,6 +53,10 @@ type Reader interface {
 	// The returned buffer is only valid until the next call to ReadN or ReadLine.
 	ReadN(n int) ([]byte, error)
 
+	// IndexAny returns the result of bytes.IndexAny invoked on the available buffer.
+	// If the delimiters are not found and the stream is at its end, returns io.UnexpectedEOF.
+	IndexAny(chars string) (int, error)
+
 	// PeekN returns the next n bytes, not advancing the read cursor.
 	//
 	// If EOF is encountered before reading n bytes, the available bytes are returned

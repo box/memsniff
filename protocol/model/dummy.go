@@ -20,6 +20,10 @@ func (s *DummySource) ReadN(n int) ([]byte, error) {
 	return nil, io.EOF
 }
 
+func (s *DummySource) IndexAny(chars string) (int, error) {
+	return -1, io.EOF
+}
+
 func (s *DummySource) PeekN(n int) ([]byte, error) {
 	return nil, io.EOF
 }

@@ -92,9 +92,25 @@ func (b *Buffer) PeekN(n int) (out []byte, err error) {
 	return
 }
 
-func (b *Buffer) ReadLine() (out []byte, err error) {
-	avail, gap := b.contiguousAvailable()
-	pos := bytes.IndexByte(b.buf.Bytes()[:avail], '\n')
+func (b *Buffer) IndexAny(chars string) (int, error) {
+	pos, avail, gap := b.indexAny(chars)
+	if pos < 0 {
+		if avail < b.len {
+			return pos, ErrLostData{gap}
+		}
+		return pos, ErrShortRead
+	}
+	return pos, nil
+}
+
+func (b *Buffer) indexAny(chars string) (pos, avail, gap int) {
+	avail, gap = b.contiguousAvailable()
+	pos = bytes.IndexAny(b.buf.Bytes()[:avail], chars)
+	return
+}
+
+func (b *Buffer) ReadLine() ([]byte, error) {
+	pos, avail, gap := b.indexAny("\n")
 	if pos < 0 {
 		if avail < b.len {
 			b.Discard(avail + gap)
@@ -103,14 +119,14 @@ func (b *Buffer) ReadLine() (out []byte, err error) {
 		return nil, ErrShortRead
 	}
 
-	out = b.buf.Bytes()[:pos]
+	out := b.buf.Bytes()[:pos]
 	if len(out) >= 1 && out[len(out)-1] == '\r' {
 		// trim \r
 		out = out[:len(out)-1]
 	}
 	// discard \n
 	b.Discard(pos + 1)
-	return
+	return out, nil
 }
 
 func (b *Buffer) Discard(n int) {

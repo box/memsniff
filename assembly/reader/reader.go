@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	BufferSize = 16 * 1024
-	debug      = false
+	BufferSize = 32 * 1024
+	debug      = true
 )
 
 // Reader implements the model.ConsumerSource interface using a Buffer.
@@ -82,6 +82,17 @@ func (r *Reader) ReadN(n int) (out []byte, err error) {
 		return nil, r.err
 	}
 	out, err = r.buf.ReadN(n)
+	if err == ErrShortRead && r.eof {
+		err = io.ErrUnexpectedEOF
+	}
+	return
+}
+
+func (r *Reader) IndexAny(chars string) (pos int, err error) {
+	if r.err != nil {
+		return -1, r.err
+	}
+	pos, err = r.buf.IndexAny(chars)
 	if err == ErrShortRead && r.eof {
 		err = io.ErrUnexpectedEOF
 	}
