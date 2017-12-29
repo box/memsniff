@@ -55,6 +55,7 @@ func (c *Consumer) run() {
 }
 
 func (c *Consumer) peekMagicByte() error {
+	c.ServerReader.Truncate()
 	firstByte, err := c.ClientReader.PeekN(1)
 	if err != nil {
 		if _, ok := err.(reader.ErrLostData); ok {
@@ -89,26 +90,26 @@ func (c *Consumer) readCommand() error {
 	c.cmd = string(bytes.TrimRight(cmd, " \r\n"))
 
 	c.args = c.args[:0]
-	c.State = c.readArgs
-
+	if c.commandState() != nil {
+		c.State = c.readArgs
+		return nil
+	}
+	c.State = c.handleUnknown
 	return nil
 }
 
 // dispatchCommand is the state after the complete client request has been read.
-func (c *Consumer) dispatchCommand() error {
+func (c *Consumer) commandState() model.State {
 	switch c.cmd {
 	case "get", "gets":
-		c.State = c.handleGet
+		return c.handleGet
 	case "set", "add", "replace", "append", "prepend", "cas":
-		c.State = c.handleSet
+		return c.handleSet
 	case "quit":
-		c.ClientReader.Close()
-		c.ServerReader.Close()
-		c.State = func() error { return io.EOF }
+		return c.handleQuit
 	default:
-		c.State = func() error { return c.discardResponse() }
+		return nil
 	}
-	return nil
 }
 
 func (c *Consumer) readArgs() error {
@@ -125,7 +126,7 @@ func (c *Consumer) readArgs() error {
 	if delim == ' ' {
 		return nil
 	}
-	c.State = c.dispatchCommand
+	c.State = c.commandState()
 	return nil
 }
 
@@ -181,6 +182,19 @@ func (c *Consumer) handleSet() error {
 		return err
 	}
 	c.log(3, "discarding response from server")
+	return c.discardResponse()
+}
+
+func (c *Consumer) handleQuit() error {
+	// don't call Consumer.Close() because tcpassembly will still write data
+	// to these readers for the FIN/FIN+ACK
+	c.ClientReader.Close()
+	c.ServerReader.Close()
+	c.State = func() error { return io.EOF }
+	return io.EOF
+}
+
+func (c *Consumer) handleUnknown() error {
 	return c.discardResponse()
 }
 
