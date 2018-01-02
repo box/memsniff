@@ -2,14 +2,12 @@ package reader
 
 import (
 	"io"
-	"log"
 
 	"github.com/google/gopacket/tcpassembly"
 )
 
 const (
 	BufferSize = 32 * 1024
-	debug      = true
 )
 
 // Reader implements the model.ConsumerSource interface using a Buffer.
@@ -31,9 +29,6 @@ func (r *Reader) Reassembled(rs []tcpassembly.Reassembly) {
 		return
 	}
 	for _, reassembly := range rs {
-		if debug {
-			log.Println("reassembling", reassembly.Skip, len(reassembly.Bytes))
-		}
 		err := r.buf.Write(reassembly.Skip, reassembly.Bytes)
 		if err != nil {
 			r.err = err

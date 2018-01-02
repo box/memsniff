@@ -108,11 +108,15 @@ type Consumer struct {
 }
 
 func New(logger log.Logger, handler EventHandler) *Consumer {
+	cr := bufferPool.Get().(*reader.Reader)
+	// cr.Logger = logger
+	sr := bufferPool.Get().(*reader.Reader)
+	// sr.Logger = logger
 	return &Consumer{
 		Logger:       logger,
 		Handler:      handler,
-		ClientReader: bufferPool.Get().(ConsumerSource),
-		ServerReader: bufferPool.Get().(ConsumerSource),
+		ClientReader: cr,
+		ServerReader: sr,
 	}
 }
 
@@ -153,11 +157,18 @@ func (c *Consumer) ServerStream() tcpassembly.Stream {
 	return (*ServerStream)(c)
 }
 
+func (c *Consumer) log(items ...interface{}) {
+	if c.Logger != nil {
+		c.Logger.Log(items...)
+	}
+}
+
 // ClientStream is a view on a Consumer that consumes tcpassembly data from the client
 type ClientStream Consumer
 
 func (cs *ClientStream) Reassembled(rs []tcpassembly.Reassembly) {
 	for _, r := range rs {
+		// (*Consumer)(cs).log("reassembling from client", r.Skip, len(r.Bytes))
 		cs.ClientReader.Reassembled([]tcpassembly.Reassembly{r})
 		(*Consumer)(cs).Run()
 	}
@@ -166,9 +177,11 @@ func (cs *ClientStream) Reassembled(rs []tcpassembly.Reassembly) {
 func (cs *ClientStream) ReassemblyComplete() {
 	cs.ClientReader.ReassemblyComplete()
 	(*Consumer)(cs).FlushEvents()
-	cs.ClientReader.Reset()
-	bufferPool.Put(cs.ClientReader)
-	cs.ClientReader = eofSource
+	if cs.ClientReader != eofSource {
+		cs.ClientReader.Reset()
+		bufferPool.Put(cs.ClientReader)
+		cs.ClientReader = eofSource
+	}
 }
 
 // ServerStream is a view on a Consumer that consumes tcpassembly data from the server
@@ -176,6 +189,7 @@ type ServerStream Consumer
 
 func (ss *ServerStream) Reassembled(rs []tcpassembly.Reassembly) {
 	for _, r := range rs {
+		// (*Consumer)(ss).log("reassembling from server", r.Skip, len(r.Bytes))
 		ss.ServerReader.Reassembled([]tcpassembly.Reassembly{r})
 		(*Consumer)(ss).Run()
 	}
@@ -184,7 +198,9 @@ func (ss *ServerStream) Reassembled(rs []tcpassembly.Reassembly) {
 func (ss *ServerStream) ReassemblyComplete() {
 	ss.ServerReader.ReassemblyComplete()
 	(*Consumer)(ss).FlushEvents()
-	ss.ServerReader.Reset()
-	bufferPool.Put(ss.ServerReader)
-	ss.ServerReader = eofSource
+	if ss.ServerReader != eofSource {
+		ss.ServerReader.Reset()
+		bufferPool.Put(ss.ServerReader)
+		ss.ServerReader = eofSource
+	}
 }

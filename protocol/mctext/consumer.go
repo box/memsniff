@@ -2,7 +2,9 @@ package mctext
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"regexp"
 	"strconv"
 
 	"github.com/box/memsniff/assembly/reader"
@@ -12,7 +14,12 @@ import (
 
 const (
 	crlf       = "\r\n"
-	debuglevel = 3
+	debuglevel = 0
+)
+
+var (
+	asciiRe, _        = regexp.Compile(`^[a-zA-Z]+$`)
+	errProtocolDesync = errors.New("protocol desync while reading command")
 )
 
 // Consumer generates events based on a memcached text protocol conversation.
@@ -39,15 +46,11 @@ func (c *Consumer) run() {
 			continue
 		case reader.ErrShortRead, io.EOF:
 			return
-		case io.ErrShortWrite:
-			c.log(1, "buffer overrun, abandoning connection")
-			c.Consumer.Close()
-			panic("buffer overrun")
-			return
 		default:
 			// data lost or protocol error, try to resync at the next command
 			c.log(2, "trying to resync after error:", err)
-			c.ClientReader.Truncate()
+			c.ClientReader.Reset()
+			c.ServerReader.Reset()
 			c.State = c.readCommand
 			return
 		}
@@ -76,6 +79,7 @@ func (c *Consumer) peekMagicByte() error {
 }
 
 func (c *Consumer) readCommand() error {
+	c.args = c.args[:0]
 	c.ServerReader.Truncate()
 	c.log(3, "reading command")
 	pos, err := c.ClientReader.IndexAny(" \n")
@@ -89,11 +93,16 @@ func (c *Consumer) readCommand() error {
 	}
 	c.cmd = string(bytes.TrimRight(cmd, " \r\n"))
 	c.log(3, "read command:", c.cmd)
-	c.args = c.args[:0]
+
+	if !asciiRe.MatchString(c.cmd) {
+		return errProtocolDesync
+	}
+
 	if c.commandState() != nil {
 		c.State = c.readArgs
 		return nil
 	}
+
 	c.State = c.handleUnknown
 	return nil
 }

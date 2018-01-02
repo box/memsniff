@@ -99,8 +99,8 @@ func (sf *streamFactory) New(netFlow, transportFlow gopacket.Flow) tcpassembly.S
 }
 
 func (sf *streamFactory) createConsumer(ck connectionKey) *model.Consumer {
-	return mctext.NewConsumer(log.NewContext(sf.logger, ck.DstString()), sf.analysis.HandleEvents)
-	// return mctext.NewConsumer(nil, sf.analysis.HandleEvents)
+	// return mctext.NewConsumer(log.NewContext(sf.logger, ck.DstString()), sf.analysis.HandleEvents)
+	return mctext.NewConsumer(nil, sf.analysis.HandleEvents)
 }
 
 func (sf *streamFactory) log(items ...interface{}) {
