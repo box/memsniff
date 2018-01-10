@@ -11,8 +11,26 @@ import (
 
 var (
 	bufferPool = sync.Pool{New: func() interface{} { return reader.New() }}
-	eofSource  = &DummySource{}
+	eofSource  *reader.Reader
 )
+
+func init() {
+	eofSource = reader.New()
+	eofSource.ReassemblyComplete()
+}
+
+// Event is a single event in a datastore conversation
+type Event struct {
+	// Type of the event.
+	Type EventType
+	// Datastore key affected by this event.
+	Key string
+	// Size of the datastore value affected by this event.
+	Size int
+}
+
+// EventHandler consumes a batch of events.
+type EventHandler func(evts []Event)
 
 // Reader represents a subset of the bufio.Reader interface.
 type Reader interface {
@@ -72,9 +90,9 @@ type Consumer struct {
 	// Handler receives events derived from the conversation.
 	Handler EventHandler
 	// ClientReader exposes data sent by the client to the server.
-	ClientReader ConsumerSource
+	ClientReader *reader.Reader
 	// ServerReader exposes data send by the server to the client.
-	ServerReader ConsumerSource
+	ServerReader *reader.Reader
 
 	Run   func()
 	State State
