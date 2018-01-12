@@ -65,12 +65,12 @@ func (b *Buffer) Len() int {
 }
 
 func (b *Buffer) ReadN(n int) (out []byte, err error) {
-	if b.len < n {
-		return nil, ErrShortRead
-	}
 	avail, gap := b.contiguousAvailable()
+	out = b.buf.Bytes()[:avail]
+	if b.len < n {
+		return out, ErrShortRead
+	}
 	if avail < n {
-		out = b.buf.Bytes()[:avail]
 		b.Discard(avail + gap)
 		return out, ErrLostData{gap}
 	}
