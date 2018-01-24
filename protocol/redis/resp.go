@@ -3,17 +3,16 @@ package redis
 import (
 	"errors"
 	"strconv"
+
 	"github.com/box/memsniff/assembly/reader"
 )
 
-type frameType int
-
 const (
 	tagStatus = '+'
-	tagError = '-'
-	tagInt = ':'
-	tagBulk = '$'
-	tagArray = '*'
+	tagError  = '-'
+	tagInt    = ':'
+	tagBulk   = '$'
+	tagArray  = '*'
 )
 
 var (
@@ -24,14 +23,15 @@ type ParserOptions struct {
 	BulkCaptureLimit int
 }
 
+// RespParser implements a stack machine to support RESP's potentially infinite
+// nested arrays.
 type RespParser struct {
-	stack []stackFrame
+	stack   []stackFrame
 	Options ParserOptions
 }
 
 type stackFrame struct {
-	frameType frameType
-	run func() error
+	run    func() error
 	result interface{}
 }
 
@@ -40,53 +40,67 @@ func NewParser(r *reader.Reader) *RespParser {
 		// start with root frame to contain eventual result
 		stack: []stackFrame{{}},
 	}
-	p.startParseValue(r)
+	p.Reset(r)
 	return p
 }
 
-func (s *RespParser) Run() error {
+func (p *RespParser) Reset(r *reader.Reader) {
+	p.stack = p.stack[:1]
+	p.startParseValue(r)
+}
+
+func (p *RespParser) Run() error {
 	for {
-		if len(s.stack) == 1 {
+		if len(p.stack) == 1 {
 			return nil
 		}
-		err := s.stack[len(s.stack)-1].run()
+		err := p.stack[len(p.stack)-1].run()
 		if err != nil {
 			return err
 		}
 	}
 }
 
-func (s *RespParser) Result() interface{} {
-	return s.stack[len(s.stack)-1].result
+func (p *RespParser) Result() interface{} {
+	return p.stack[len(p.stack)-1].result
 }
 
-func (s *RespParser) push(f func() error) {
-	s.stack = append(s.stack, stackFrame{run: f})
+func (p *RespParser) BytesArray() [][]byte {
+	res := p.Result().([]interface{})
+	out := make([][]byte, len(res))
+	for i, b := range res {
+		out[i] = b.([]byte)
+	}
+	return out
 }
 
-func (s *RespParser) pop(result interface{}) {
-	s.stack = s.stack[:len(s.stack)-1]
-	s.stack[len(s.stack)-1].result = result
+func (p *RespParser) push(f func() error) {
+	p.stack = append(p.stack, stackFrame{run: f})
 }
 
-func (s *RespParser) startParseValue(r *reader.Reader) {
-	s.push(func() error {
+func (p *RespParser) pop(result interface{}) {
+	p.stack = p.stack[:len(p.stack)-1]
+	p.stack[len(p.stack)-1].result = result
+}
+
+func (p *RespParser) startParseValue(r *reader.Reader) {
+	p.push(func() error {
 		out, err := r.ReadN(1)
 		if err != nil {
 			return err
 		}
-		s.pop(nil)
+		p.pop(nil)
 		switch out[0] {
 		case tagStatus:
-			s.startParseSimpleString(r, false)
+			p.startParseSimpleString(r, false)
 		case tagError:
-			s.startParseSimpleString(r, true)
+			p.startParseSimpleString(r, true)
 		case tagInt:
-			s.startParseInt(r)
+			p.startParseInt(r)
 		case tagBulk:
-			s.startParseBulk(r)
+			p.startParseBulk(r)
 		case tagArray:
-			s.startParseArray(r)
+			p.startParseArray(r)
 		default:
 			return ProtocolErr
 		}
@@ -94,23 +108,23 @@ func (s *RespParser) startParseValue(r *reader.Reader) {
 	})
 }
 
-func (s *RespParser) startParseSimpleString(r *reader.Reader, asError bool) {
-	s.push(func() error {
+func (p *RespParser) startParseSimpleString(r *reader.Reader, asError bool) {
+	p.push(func() error {
 		out, err := r.ReadLine()
 		if err != nil {
 			return err
 		}
 		if asError {
-			s.pop(errors.New(string(out)))
+			p.pop(errors.New(string(out)))
 		} else {
-			s.pop(string(out))
+			p.pop(string(out))
 		}
 		return nil
 	})
 }
 
-func (s *RespParser) startParseInt(r *reader.Reader) {
-	s.push(func() error {
+func (p *RespParser) startParseInt(r *reader.Reader) {
+	p.push(func() error {
 		out, err := r.ReadLine()
 		if err != nil {
 			return err
@@ -119,72 +133,72 @@ func (s *RespParser) startParseInt(r *reader.Reader) {
 		if err != nil {
 			return err
 		}
-		s.pop(i)
+		p.pop(i)
 		return nil
 	})
 }
 
-func (s *RespParser) startParseBulk(r *reader.Reader) {
+func (p *RespParser) startParseBulk(r *reader.Reader) {
 	// prepare handler to read and discard the body
-	s.push(func() error {
-		result := s.Result().(int)
+	p.push(func() error {
+		result := p.Result().(int)
 		if result < 0 {
 			// Redis "nil" result
-			s.pop(nil)
+			p.pop(nil)
 			return nil
 		}
-		if result <= s.Options.BulkCaptureLimit {
-			s.pop(nil)
-			s.startParseBulkN(r, nil, result)
+		if result <= p.Options.BulkCaptureLimit {
+			p.pop(nil)
+			p.startParseBulkN(r, make([]byte, 0, result), result)
 		} else {
-			s.pop(result)
-			r.Discard(s.Result().(int) + 2)
+			p.pop(result)
+			r.Discard(p.Result().(int) + 2)
 		}
 		return nil
 	})
-	s.startParseInt(r)
+	p.startParseInt(r)
 }
 
-func (s *RespParser) startParseBulkN(r *reader.Reader, accum []byte, n int) {
-	s.push(func() error {
+func (p *RespParser) startParseBulkN(r *reader.Reader, accum []byte, n int) {
+	p.push(func() error {
 		out, err := r.ReadN(n)
 		if err != nil {
 			if err == reader.ErrShortRead {
 				accum = append(accum, out...)
-				s.pop(nil)
+				p.pop(nil)
 				r.Discard(len(out))
-				s.startParseBulkN(r, accum, n - len(out))
+				p.startParseBulkN(r, accum, n-len(out))
 			}
 			return err
 		}
 		r.Discard(2)
-		s.pop(append(accum, out...))
+		p.pop(append(accum, out...))
 		return nil
 	})
 }
 
-func (s *RespParser) startParseArray(r *reader.Reader) {
-	s.push(func() error {
-		n := s.Result().(int)
-		s.pop(nil)
-		s.stack[len(s.stack)-1].result = []interface{}{}
-		s.startParseNArrayFields(r, n)
+func (p *RespParser) startParseArray(r *reader.Reader) {
+	p.push(func() error {
+		n := p.Result().(int)
+		p.pop(nil)
+		p.stack[len(p.stack)-1].result = make([]interface{}, 0, n)
+		p.startParseNArrayFields(r, n)
 		return nil
 	})
-	s.startParseInt(r)
+	p.startParseInt(r)
 }
 
-func (s *RespParser) startParseNArrayFields(r *reader.Reader, n int) {
-	s.push(func() error {
+func (p *RespParser) startParseNArrayFields(r *reader.Reader, n int) {
+	p.push(func() error {
 		// value parsed
-		result := s.Result()
-		results := append(s.stack[len(s.stack)-2].result.([]interface{}), result)
-		s.pop(results)
+		result := p.Result()
+		results := append(p.stack[len(p.stack)-2].result.([]interface{}), result)
+		p.pop(results)
 		if n > 1 {
-			s.startParseNArrayFields(r, n-1)
+			p.startParseNArrayFields(r, n-1)
 			return nil
 		}
 		return nil
 	})
-	s.startParseValue(r)
+	p.startParseValue(r)
 }
