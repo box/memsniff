@@ -2,74 +2,156 @@ package mctext
 
 import (
 	"bytes"
-	"github.com/box/memsniff/protocol/model"
+	"errors"
 	"io"
+	"regexp"
 	"strconv"
+
+	"github.com/box/memsniff/assembly/reader"
+	"github.com/box/memsniff/log"
+	"github.com/box/memsniff/protocol/model"
 )
 
 const (
-	crlf = "\r\n"
+	crlf       = "\r\n"
+	debuglevel = 0
+)
+
+var (
+	asciiRe, _        = regexp.Compile(`^[a-zA-Z]+$`)
+	errProtocolDesync = errors.New("protocol desync while reading command")
 )
 
 // Consumer generates events based on a memcached text protocol conversation.
-type Consumer model.Consumer
+type Consumer struct {
+	*model.Consumer
+	cmd  string
+	args []string
+}
 
-// Run reads the conversation and returns at the close of the conversation.
-// The client- and server-side readers are closed before Run returns.
-func (c *Consumer) Run() {
-	defer c.ClientReader.Close()
-	defer c.ServerReader.Close()
-	defer (*model.Consumer)(c).FlushEvents()
+func NewConsumer(logger log.Logger, handler model.EventHandler) *model.Consumer {
+	c := Consumer{
+		Consumer: model.New(logger, handler),
+	}
+	c.Consumer.Run = c.run
+	c.Consumer.State = c.peekMagicByte
+	return c.Consumer
+}
+
+func (c *Consumer) run() {
 	for {
-		c.log("awaiting command")
-		line, err := c.ClientReader.ReadLine()
-		if err == io.EOF {
-			return
-		}
-		if err != nil {
-			return
-		}
-		c.log("read command:", string(line))
-		fields := bytes.Split(line, []byte(" "))
-		if len(fields) <= 0 {
+		err := c.State()
+		switch err {
+		case nil:
 			continue
-		}
-
-		switch string(fields[0]) {
-		case "get", "gets":
-			err = c.handleGet(fields[1:])
-			if err != nil {
-				c.log("error processing stream:", err)
-				return
-			}
-		case "set", "add", "replace", "append", "prepend":
-			err = c.handleSet(fields[1:])
-			if err != nil {
-				c.log("error processing stream:", err)
-				return
-			}
-		case "quit":
+		case reader.ErrShortRead, io.EOF:
 			return
 		default:
-			err = c.discardResponse()
-			if err != nil {
-				c.log("error processing unknown command", string(line), ":", err)
-			}
+			// data lost or protocol error, try to resync at the next command
+			c.log(2, "trying to resync after error:", err)
+			c.ClientReader.Reset()
+			c.ServerReader.Reset()
+			c.State = c.readCommand
+			return
 		}
 	}
 }
 
-func (c *Consumer) handleGet(fields [][]byte) error {
-	if len(fields) < 1 {
+func (c *Consumer) peekMagicByte() error {
+	c.ServerReader.Truncate()
+	firstByte, err := c.ClientReader.PeekN(1)
+	if err != nil {
+		if _, ok := err.(reader.ErrLostData); ok {
+			// try again, making sure we read from the start of a client packet.
+			c.ClientReader.Truncate()
+			err = reader.ErrShortRead
+		}
+		return err
+	}
+	if firstByte[0] == 0x80 {
+		//binary memcached protocol, don't try to handle this connection
+		c.log(2, "looks like binary protocol, ignoring connection")
+		c.Consumer.Close()
+		return io.EOF
+	}
+	c.State = c.readCommand
+	return nil
+}
+
+func (c *Consumer) readCommand() error {
+	c.args = c.args[:0]
+	c.ServerReader.Truncate()
+	c.log(3, "reading command")
+	pos, err := c.ClientReader.IndexAny(" \n")
+	if err != nil {
+		return err
+	}
+
+	cmd, err := c.ClientReader.ReadN(pos + 1)
+	if err != nil {
+		return err
+	}
+	c.cmd = string(bytes.TrimRight(cmd, " \r\n"))
+	c.log(3, "read command:", c.cmd)
+
+	if !asciiRe.MatchString(c.cmd) {
+		return errProtocolDesync
+	}
+
+	if c.commandState() != nil {
+		c.State = c.readArgs
+		return nil
+	}
+
+	c.State = c.handleUnknown
+	return nil
+}
+
+// dispatchCommand is the state after the complete client request has been read.
+func (c *Consumer) commandState() model.State {
+	switch c.cmd {
+	case "get", "gets":
+		return c.handleGet
+	case "set", "add", "replace", "append", "prepend", "cas":
+		return c.handleSet
+	case "quit":
+		return c.handleQuit
+	default:
+		return nil
+	}
+}
+
+func (c *Consumer) readArgs() error {
+	c.ServerReader.Truncate()
+	pos, err := c.ClientReader.IndexAny(" \n")
+	if err != nil {
+		return err
+	}
+	word, err := c.ClientReader.ReadN(pos + 1)
+	if err != nil {
+		return err
+	}
+	c.args = append(c.args, string(bytes.TrimRight(word[:len(word)-1], "\r")))
+	delim := word[len(word)-1]
+	if delim == ' ' {
+		return nil
+	}
+	c.log(3, "read arguments:", c.args)
+	c.State = c.commandState()
+	return nil
+}
+
+func (c *Consumer) handleGet() error {
+	if len(c.args) < 1 {
 		return c.discardResponse()
 	}
 	for {
-		c.log("awaiting server reply to get")
+		c.log(3, "awaiting server reply to get for", len(c.args), "keys")
 		line, err := c.ServerReader.ReadLine()
 		if err != nil {
 			return err
 		}
-		c.log("server reply:", string(line))
+		c.log(3, "server reply:", string(line))
 		fields := bytes.Split(line, []byte(" "))
 		if len(fields) >= 4 && bytes.Equal(fields[0], []byte("VALUE")) {
 			key := fields[1]
@@ -82,49 +164,69 @@ func (c *Consumer) handleGet(fields [][]byte) error {
 				Key:  string(key),
 				Size: size,
 			}
-			c.log("sending event:", evt)
+			// c.log("sending event:", evt)
 			c.addEvent(evt)
-			c.log("discarding value")
+			// c.log("discarding value")
 			_, err = c.ServerReader.Discard(size + len(crlf))
 			if err != nil {
 				return err
 			}
-			c.log("discarded value")
+			// c.log("discarded value")
 		} else {
+			c.State = c.readCommand
 			return nil
 		}
 	}
 }
 
-func (c *Consumer) handleSet(fields [][]byte) error {
-	if len(fields) < 4 {
+func (c *Consumer) handleSet() error {
+	if len(c.args) < 4 {
 		return c.discardResponse()
 	}
-	size, err := strconv.Atoi(string(fields[3]))
+	size, err := strconv.Atoi(c.args[3])
 	if err != nil {
 		return c.discardResponse()
 	}
-	c.log("discarding", size+len(crlf), "from client")
+	c.log(3, "discarding", size+len(crlf), "from client")
 	_, err = c.ClientReader.Discard(size + len(crlf))
 	if err != nil {
-		return nil
+		return err
 	}
-	c.log("discarding response from server")
+	c.log(3, "discarding response from server")
+	return c.discardResponse()
+}
+
+func (c *Consumer) handleQuit() error {
+	// don't call Consumer.Close() because tcpassembly will still write data
+	// to these readers for the FIN/FIN+ACK
+	c.ClientReader.Close()
+	c.ServerReader.Close()
+	c.State = func() error { return io.EOF }
+	return io.EOF
+}
+
+func (c *Consumer) handleUnknown() error {
 	return c.discardResponse()
 }
 
 func (c *Consumer) discardResponse() error {
+	c.State = c.discardResponse
+	c.log(3, "discarding response from server")
 	line, err := c.ServerReader.ReadLine()
-	c.log("discarded response from server:", string(line))
-	return err
+	if err != nil {
+		return err
+	}
+	c.log(3, "discarded response from server:", string(line))
+	c.State = c.readCommand
+	return nil
 }
 
 func (c *Consumer) addEvent(evt model.Event) {
-	(*model.Consumer)(c).AddEvent(evt)
+	c.Consumer.AddEvent(evt)
 }
 
-func (c *Consumer) log(items ...interface{}) {
-	if c.Logger != nil {
+func (c *Consumer) log(level int, items ...interface{}) {
+	if c.Logger != nil && debuglevel >= level {
 		c.Logger.Log(items...)
 	}
 }

@@ -86,6 +86,27 @@ func (r *replayer) dropExpired(elapsed time.Duration) {
 	}
 }
 
+func (r *replayer) DiscardPacket() error {
+	if r.cursor >= r.buf.PacketLen() {
+		err := r.fill()
+		if r.buf.PacketLen() == 0 || err != nil {
+			return err
+		}
+	}
+
+	p := r.buf.Packet(r.cursor)
+	offset := p.Info.Timestamp.Sub(r.first)
+	elapsed := time.Since(r.start)
+	if offset > elapsed+replayerTimeout {
+		time.Sleep(replayerTimeout)
+		return pcap.NextErrorTimeoutExpired
+	}
+
+	r.cursor++
+	r.received++
+	return nil
+}
+
 func (r *replayer) Stats() (*pcap.Stats, error) {
 	return &pcap.Stats{
 		PacketsReceived: r.received,

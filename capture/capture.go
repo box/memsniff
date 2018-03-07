@@ -42,6 +42,8 @@ type StatProvider interface {
 type PacketSource interface {
 	// CollectPackets fills pb with packets.
 	CollectPackets(pb *PacketBuffer) error
+	// DiscardPacket reads a single packet and discards its contents.
+	DiscardPacket() error
 	StatProvider
 }
 
@@ -161,4 +163,9 @@ func (s source) CollectPackets(pb *PacketBuffer) error {
 		}
 	}
 	return nil
+}
+
+func (s source) DiscardPacket() error {
+	_, _, err := s.ZeroCopyReadPacketData()
+	return err
 }

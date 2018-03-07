@@ -2,10 +2,12 @@
 package decode
 
 import (
+	"io"
+	"time"
+
 	"github.com/box/memsniff/capture"
 	"github.com/box/memsniff/log"
 	"github.com/google/gopacket/pcap"
-	"io"
 )
 
 type workerQueue chan *worker
@@ -20,29 +22,37 @@ type Stats struct {
 // single PacketSource. A Pool operates on a pull model, only requesting packet
 // data when there is a worker ready to receive it.
 type Pool struct {
-	logger  log.Logger
-	src     capture.PacketSource
-	handler Handler
-
-	readyQ     workerQueue
+	logger     log.Logger
 	numWorkers int
+	src        capture.PacketSource
+	readyQ     workerQueue
 	stats      Stats
 }
 
 // NewPool creates a new Pool of workers.  As packets are captured and decoded,
 // handler is invoked.  handler is invoked from multiple worker gorountines
 // concurrently and thus must be threadsafe.
-func NewPool(logger log.Logger, src capture.PacketSource, handler Handler) *Pool {
-	return &Pool{
-		logger:  logger,
-		src:     src,
-		handler: handler,
-		readyQ:  make(workerQueue, 8),
+func NewPool(logger log.Logger, numWorkers int, src capture.PacketSource, handler Handler) *Pool {
+	p := &Pool{
+		logger:     logger,
+		numWorkers: numWorkers,
+		src:        src,
+		readyQ:     make(workerQueue, numWorkers),
 	}
+
+	for i := 0; i < numWorkers; i++ {
+		decoder := newDecoder(logger, handler)
+		p.startWorker(p.readyQ, decoder.decodeBatch, 1000, 8*1024*1024, i)
+	}
+
+	return p
 }
 
 // Run starts the Pool decoding packets from the configured PacketSource and
 // sending the results to the PacketHandler.
+//
+// Packets are dropped if they arrive more rapidly than the Pool can handle
+// them.
 func (p *Pool) Run() {
 	for {
 		select {
@@ -57,9 +67,19 @@ func (p *Pool) Run() {
 				p.logger.Log("Decoder exiting")
 				return
 			}
-
 		default:
-			p.startWorker()
+			err := p.src.DiscardPacket()
+			if err == pcap.NextErrorTimeoutExpired {
+				// loop again
+			} else if err == io.EOF {
+				// wait for a worker to become ready so we can
+				// shut them down and avoid a busy-wait loop.
+				time.Sleep(10 * time.Millisecond)
+			} else if err == nil {
+				p.stats.PacketsDropped++
+			} else {
+				p.logger.Log("Error from DiscardPacket", err)
+			}
 		}
 	}
 }
@@ -87,26 +107,7 @@ func (p *Pool) sendToWorker(w *worker) error {
 		p.logger.Log("Error from CollectPackets", err)
 		return err
 	}
+	// tell worker how much of its working area contains valid new packets
 	w.work()
 	return nil
-}
-
-// startWorker creates a background Worker that will send itself to q when it
-// is ready for a new batch of packets.  This Worker can then be given work
-// or closed, which will clean up the goroutine.
-//
-// handler will be invoked on the Worker's background goroutine.
-func (p *Pool) startWorker() {
-	d := newDecoder(p.logger, p.handler)
-	w := worker{
-		id:          p.numWorkers,
-		workerQueue: p.readyQ,
-		pb:          capture.NewPacketBuffer(batchSize, 8*1024*1024),
-		workReady:   make(chan struct{}, 1),
-		handler:     d.decodeBatch,
-	}
-	p.numWorkers++
-
-	p.logger.Log("starting decode worker", w.id)
-	go w.loop()
 }

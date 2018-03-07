@@ -3,8 +3,8 @@ package assembly
 import (
 	"encoding/binary"
 	"fmt"
+
 	"github.com/box/memsniff/analysis"
-	"github.com/box/memsniff/assembly/reader"
 	"github.com/box/memsniff/log"
 	"github.com/box/memsniff/protocol/mctext"
 	"github.com/box/memsniff/protocol/model"
@@ -90,28 +90,16 @@ func (sf *streamFactory) New(netFlow, transportFlow gopacket.Flow) tcpassembly.S
 
 	var stream tcpassembly.Stream
 	if fromServer {
-		stream = c.ServerReader
+		stream = c.ServerStream()
 	} else {
-		stream = c.ClientReader
+		stream = c.ClientStream()
 	}
 
 	return stream
 }
 
 func (sf *streamFactory) createConsumer(ck connectionKey) *model.Consumer {
-	client, server := reader.NewPair()
-	// ensure that we report data loss in the TCP stream to the consumer
-	client.LossErrors = true
-	server.LossErrors = true
-
-	c := &mctext.Consumer{
-		//Logger:       log.NewContext(sf.logger, ck.DstString()),
-		Handler:      sf.analysis.HandleEvents,
-		ClientReader: client,
-		ServerReader: server,
-	}
-	go c.Run()
-	return (*model.Consumer)(c)
+	return mctext.NewConsumer(nil, sf.analysis.HandleEvents)
 }
 
 func (sf *streamFactory) log(items ...interface{}) {
