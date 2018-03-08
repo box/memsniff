@@ -65,11 +65,12 @@ func (p *RespParser) Result() interface{} {
 	return p.stack[len(p.stack)-1].result
 }
 
-func (p *RespParser) BytesArray() [][]byte {
+func (p *RespParser) BulkArray() [][]byte {
 	res := p.Result().([]interface{})
 	out := make([][]byte, len(res))
 	for i, b := range res {
-		out[i] = b.([]byte)
+		// just set as nil if the item was bigger than BulkCaptureLimit
+		out[i], _ = b.([]byte)
 	}
 	return out
 }

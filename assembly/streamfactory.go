@@ -6,7 +6,7 @@ import (
 
 	"github.com/box/memsniff/analysis"
 	"github.com/box/memsniff/log"
-	"github.com/box/memsniff/protocol/mctext"
+	"github.com/box/memsniff/protocol/infer"
 	"github.com/box/memsniff/protocol/model"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -99,7 +99,8 @@ func (sf *streamFactory) New(netFlow, transportFlow gopacket.Flow) tcpassembly.S
 }
 
 func (sf *streamFactory) createConsumer(ck connectionKey) *model.Consumer {
-	return mctext.NewConsumer(nil, sf.analysis.HandleEvents)
+	return infer.NewConsumer(log.NewContext(sf.logger, ck.DstString()), sf.analysis.HandleEvents)
+	// return infer.NewConsumer(nil, sf.analysis.HandleEvents)
 }
 
 func (sf *streamFactory) log(items ...interface{}) {

@@ -18,14 +18,22 @@ type Consumer struct {
 	parser *RespParser
 }
 
-func NewConsumer(logger log.Logger, handler model.EventHandler) *model.Consumer {
-	c := Consumer{
+func NewConsumer(logger log.Logger, handler model.EventHandler) *Consumer {
+	c := &Consumer{
 		Consumer: model.New(logger, handler),
 		parser:   NewParser(nil),
 	}
 	c.Consumer.Run = c.run
 	c.transitionTo(false, c.readCommand)
-	return c.Consumer
+	return c
+}
+
+func (c *Consumer) AdoptStreams(client, server *reader.Reader) {
+	c.Consumer.Close()
+	c.ClientReader = client
+	c.ServerReader = server
+	c.parser.Reset(c.ClientReader)
+	c.Consumer.Run = c.run
 }
 
 func (c *Consumer) run() {
@@ -62,7 +70,7 @@ func (c *Consumer) readCommand() error {
 	if err != nil {
 		return err
 	}
-	fields := c.parser.BytesArray()
+	fields := c.parser.BulkArray()
 	cmd := fields[0]
 	switch strings.ToLower(string(cmd)) {
 	case "get", "mget":
@@ -85,11 +93,13 @@ func (c *Consumer) handleGet(key []byte) func() error {
 		}
 		res := c.parser.Result()
 		if res == nil {
+			c.log("miss: ", string(key))
 			c.Consumer.AddEvent(model.Event{
 				Type: model.EventGetMiss,
 				Key:  string(key),
 			})
 		} else {
+			c.log("hit: ", string(key))
 			c.Consumer.AddEvent(model.Event{
 				Type: model.EventGetHit,
 				Key:  string(key),
@@ -108,4 +118,10 @@ func (c *Consumer) discardResponse() error {
 	}
 	c.transitionTo(false, c.readCommand)
 	return nil
+}
+
+func (c *Consumer) log(items ...interface{}) {
+	if c.Logger != nil {
+		c.Logger.Log(items...)
+	}
 }
