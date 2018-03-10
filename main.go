@@ -21,7 +21,7 @@ var (
 	netInterface = flag.StringP("interface", "i", "", "network interface to sniff")
 	infile       = flag.StringP("read", "r", "", "file to read (- for stdin)")
 	bufferSize   = flag.IntP("buffersize", "b", 8, "MiB of kernel buffer for packet data")
-	ports        = flag.IntSliceP("ports", "p", []int{11211}, "memcached ports to listen on")
+	ports        = flag.IntSliceP("ports", "p", []int{6379, 11211}, "ports to listen on")
 
 	assemblyWorkers = flag.Int("assemblyworkers", 8, "number of TCP assembly workers")
 	decodeWorkers   = flag.Int("decodeworkers", 8, "number of decode workers")
