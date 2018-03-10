@@ -53,18 +53,22 @@ func TestTextIncompleteBody(t *testing.T) {
 }
 
 func TestClientOverrun(t *testing.T) {
-	r := NewConsumer(&log.ConsoleLogger{}, nil)
+	r := newConsumer(&log.ConsoleLogger{}, nil)
 	var data [1024]byte
 	for i := 0; i < 1024; i++ {
 		r.ClientStream().Reassembled(reassemblyString(string(data[:])))
 	}
 }
 func TestServerOverrun(t *testing.T) {
-	r := NewConsumer(&log.ConsoleLogger{}, nil)
+	r := newConsumer(&log.ConsoleLogger{}, nil)
 	var data [1024]byte
 	for i := 0; i < 1024; i++ {
 		r.ServerStream().Reassembled(reassemblyString(string(data[:])))
 	}
+}
+
+func newConsumer(logger log.Logger, handler model.EventHandler) *model.Consumer {
+	return model.New(handler, NewFsm(logger))
 }
 
 func testReadText(t *testing.T, lines []string, expected []model.Event) {
@@ -76,7 +80,7 @@ func testReadText(t *testing.T, lines []string, expected []model.Event) {
 			expected = expected[1:]
 		}
 	}
-	r := NewConsumer(&log.ConsoleLogger{}, handler)
+	r := newConsumer(&log.ConsoleLogger{}, handler)
 
 	r.ClientStream().Reassembled(reassemblyString("get key1 key2 key3\r\n"))
 	for _, l := range lines {

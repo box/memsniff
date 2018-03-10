@@ -86,7 +86,8 @@ func test(t *testing.T, input []string, output []string, expected []model.Event)
 			expected = expected[1:]
 		}
 	}
-	c := NewConsumer(&log.ConsoleLogger{}, handler)
+
+	c := model.New(handler, NewFsm(log.ConsoleLogger{}))
 	for _, s := range input {
 		c.ClientStream().Reassembled(reassemblyString(s))
 		c.ClientStream().Reassembled(reassemblyString("\r\n"))

@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/box/memsniff/assembly/reader"
-	"github.com/box/memsniff/log"
 	"github.com/google/gopacket/tcpassembly"
 )
 
@@ -80,13 +79,8 @@ type ConsumerSource interface {
 	tcpassembly.Stream
 }
 
-// State is a function to be called to process buffered data in a particular connection state.
-type State func() error
-
 // Consumer is a generic reader of a datastore conversation.
 type Consumer struct {
-	// A Logger instance for debugging.  No logging is done if nil.
-	Logger log.Logger
 	// Handler receives events derived from the conversation.
 	Handler EventHandler
 	// ClientReader exposes data sent by the client to the server.
@@ -94,23 +88,21 @@ type Consumer struct {
 	// ServerReader exposes data send by the server to the client.
 	ServerReader *reader.Reader
 
-	Run   func()
-	State State
-
+	Fsm      Fsm
 	eventBuf []Event
 }
 
-func New(logger log.Logger, handler EventHandler) *Consumer {
+func New(handler EventHandler, fsm Fsm) *Consumer {
 	cr := bufferPool.Get().(*reader.Reader)
-	// cr.Logger = logger
 	sr := bufferPool.Get().(*reader.Reader)
-	// sr.Logger = logger
-	return &Consumer{
-		Logger:       logger,
+	c := &Consumer{
 		Handler:      handler,
 		ClientReader: cr,
 		ServerReader: sr,
+		Fsm:          fsm,
 	}
+	fsm.SetConsumer(c)
+	return c
 }
 
 func (c *Consumer) AddEvent(evt Event) {
@@ -139,7 +131,7 @@ func (c *Consumer) Close() {
 		bufferPool.Put(c.ServerReader)
 		c.ServerReader = eofSource
 	}
-	c.Run = func() {}
+	c.Fsm = noopFsm{}
 }
 
 func (c *Consumer) ClientStream() tcpassembly.Stream {
@@ -150,20 +142,13 @@ func (c *Consumer) ServerStream() tcpassembly.Stream {
 	return (*ServerStream)(c)
 }
 
-func (c *Consumer) log(items ...interface{}) {
-	if c.Logger != nil {
-		c.Logger.Log(items...)
-	}
-}
-
 // ClientStream is a view on a Consumer that consumes tcpassembly data from the client
 type ClientStream Consumer
 
 func (cs *ClientStream) Reassembled(rs []tcpassembly.Reassembly) {
 	for _, r := range rs {
-		// (*Consumer)(cs).log("reassembling from client", r.Skip, len(r.Bytes))
 		cs.ClientReader.Reassembled([]tcpassembly.Reassembly{r})
-		(*Consumer)(cs).Run()
+		(*Consumer)(cs).Fsm.Run()
 	}
 }
 
@@ -182,9 +167,8 @@ type ServerStream Consumer
 
 func (ss *ServerStream) Reassembled(rs []tcpassembly.Reassembly) {
 	for _, r := range rs {
-		// (*Consumer)(ss).log("reassembling from server", r.Skip, len(r.Bytes))
 		ss.ServerReader.Reassembled([]tcpassembly.Reassembly{r})
-		(*Consumer)(ss).Run()
+		(*Consumer)(ss).Fsm.Run()
 	}
 }
 
