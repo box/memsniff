@@ -89,31 +89,6 @@ $ go test ./...
 ...
 ok  	github.com/box/memsniff/vendor/github.com/spf13/pflag	0.067s
 ```
-3rd party package dependencies are in the `vendor` directory, and you can
-significantly speed up test execution time by bypassing this folder.
-
-`memsniff` uses [Glide](https://github.com/Masterminds/glide) to manage its
-dependencies, and if you have it installed, you can easily test just
-`memsniff`'s packages with Glide's `novendor` command:
-
-```shell
-$ go test $(glide nv)
-?   	github.com/box/memsniff/analysis	[no test files]
-...
-ok  	github.com/box/memsniff/protocol	0.009s
-?   	github.com/box/memsniff	[no test files])
-```
-
-Alternatively, you can do much the same thing with a little `grep` magic:
-
-```shell
-$ go test $( go list ./... | grep -v /vendor/ )
-?   	github.com/box/memsniff	[no test files]
-...
-?   	github.com/box/memsniff/presentation	[no test files]
-ok  	github.com/box/memsniff/protocol	0.009s
-$
-```
 
 
 #### Data pipeline
