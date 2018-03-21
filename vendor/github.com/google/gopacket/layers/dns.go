@@ -511,6 +511,10 @@ const maxRecursionLevel = 255
 func decodeName(data []byte, offset int, buffer *[]byte, level int) ([]byte, int, error) {
 	if level > maxRecursionLevel {
 		return nil, 0, errMaxRecursion
+	} else if offset >= len(data) {
+		return nil, 0, errors.New("dns name offset too high")
+	} else if offset < 0 {
+		return nil, 0, errors.New("dns name offset is negative")
 	}
 	start := len(*buffer)
 	index := offset
@@ -559,7 +563,9 @@ loop:
 			      - a pointer
 			      - a sequence of labels ending with a pointer
 			*/
-
+			if index+2 > len(data) {
+				return nil, 0, errors.New("dns offset pointer too high")
+			}
 			offsetp := int(binary.BigEndian.Uint16(data[index:index+2]) & 0x3fff)
 			if offsetp > len(data) {
 				return nil, 0, errors.New("dns offset pointer too high")
@@ -583,6 +589,12 @@ loop:
 			return nil, 0, fmt.Errorf("qname '0x80' unsupported yet (data=%x index=%d)",
 				data[index], index)
 		}
+		if index >= len(data) {
+			return nil, 0, errors.New("dns index walked out of range")
+		}
+	}
+	if len(*buffer) <= start {
+		return nil, 0, errors.New("no dns data found for name")
 	}
 	return (*buffer)[start+1:], index + 1, nil
 }
@@ -672,7 +684,11 @@ func (rr *DNSResourceRecord) decode(data []byte, offset int, df gopacket.DecodeF
 	rr.Class = DNSClass(binary.BigEndian.Uint16(data[endq+2 : endq+4]))
 	rr.TTL = binary.BigEndian.Uint32(data[endq+4 : endq+8])
 	rr.DataLength = binary.BigEndian.Uint16(data[endq+8 : endq+10])
-	rr.Data = data[endq+10 : endq+10+int(rr.DataLength)]
+	end := endq + 10 + int(rr.DataLength)
+	if end > len(data) {
+		return 0, fmt.Errorf("resource record length exceeds data")
+	}
+	rr.Data = data[endq+10 : end]
 
 	if err = rr.decodeRData(data, endq+10, buffer); err != nil {
 		return 0, err
