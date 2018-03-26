@@ -29,7 +29,7 @@ var (
 	profiles        = flag.StringSlice("profile", []string{}, "profile types to store (one or more of cpu, heap, block)")
 
 	filter     = flag.String("filter", "", "regex pattern of cache keys to track")
-	format     = flag.StringP("format", "f", "key,max(size),sum(size)", "data and aggregates to display")
+	format     = flag.StringP("format", "f", "key,max(size),sum(size)", "fields (key, size) and aggregates (avg, max, min, sum, p50 (median), p995 (99.5th percentile), etc.) to display")
 	interval   = flag.IntP("interval", "n", 1, "report top keys every this many seconds")
 	cumulative = flag.Bool("cumulative", false, "accumulate keys over all time instead of an interval")
 
