@@ -194,7 +194,7 @@ func NewFactoryFromDescriptor(desc string) (AggregatorFactory, error) {
 	case "min":
 		return func() Aggregator { return &Min{} }, nil
 
-	case "mean", "avg":
+	case "avg":
 		return func() Aggregator { return &Mean{} }, nil
 
 	case "sum":
