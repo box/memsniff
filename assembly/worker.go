@@ -26,11 +26,12 @@ type worker struct {
 	wiCh      chan workItem
 }
 
-func newWorker(logger log.Logger, analysis *analysis.Pool, memcachePorts []int) worker {
+func newWorker(logger log.Logger, analysis *analysis.Pool, protocol model.ProtocolType, ports []int) worker {
 	sf := streamFactory{
-		logger:        logger,
-		analysis:      analysis,
-		memcachePorts: memcachePorts,
+		logger:   logger,
+		analysis: analysis,
+		protocol: protocol,
+		ports:    ports,
 
 		halfOpen: make(map[connectionKey]*model.Consumer),
 	}

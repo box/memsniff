@@ -18,7 +18,7 @@ const (
 )
 
 var (
-	ProtocolErr = errors.New("RESP protocol error")
+	ProtocolErr       = errors.New("RESP protocol error")
 	RecursionLimitErr = errors.New("too many nested RESP arrays")
 )
 

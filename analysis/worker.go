@@ -25,7 +25,7 @@ type worker struct {
 	// create KeyAggregators based on the configured format
 	aggregatorFactory aggregate.KeyAggregatorFactory
 	// one KeyAggregator per key, where key is determined by aggregatorFactory
-	aggregators       map[string]aggregate.KeyAggregator
+	aggregators map[string]aggregate.KeyAggregator
 }
 
 // errQueueFull is returned by handleGetResponse if the worker cannot keep
@@ -130,7 +130,7 @@ func (w *worker) handleEvent(evt model.Event) {
 
 type result struct {
 	// keyFields[x] is the list of values used as keys for a set of aggregates.
-	keyFields  [][]string
+	keyFields [][]string
 	// aggResults[x] is the aggregate results for keyFields[x], in format-determined order.
 	aggResults [][]int64
 }

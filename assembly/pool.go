@@ -4,6 +4,7 @@ import (
 	"github.com/box/memsniff/analysis"
 	"github.com/box/memsniff/decode"
 	"github.com/box/memsniff/log"
+	"github.com/box/memsniff/protocol/model"
 )
 
 // Pool manages a set of workers each responsible for a set of TCP conversations (stream pairs).
@@ -13,13 +14,13 @@ type Pool struct {
 }
 
 // New creates a new pool for reassembling TCP streams.
-func New(logger log.Logger, analysis *analysis.Pool, memcachePorts []int, numWorkers int) *Pool {
+func New(logger log.Logger, analysis *analysis.Pool, protocol model.ProtocolType, ports []int, numWorkers int) *Pool {
 	p := &Pool{
 		logger,
 		make([]worker, numWorkers),
 	}
 	for i := 0; i < numWorkers; i++ {
-		p.workers[i] = newWorker(logger, analysis, memcachePorts)
+		p.workers[i] = newWorker(logger, analysis, protocol, ports)
 	}
 	return p
 }
