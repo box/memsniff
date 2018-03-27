@@ -49,7 +49,7 @@ func (r *Reader) Reset() {
 }
 
 func (r *Reader) Truncate() {
-	r.buf.Reset()
+	r.buf.Truncate()
 }
 
 func (r *Reader) Discard(n int) (discarded int, err error) {

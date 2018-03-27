@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/box/memsniff/protocol/model"
 	"os"
 	"os/signal"
 	"time"
@@ -21,7 +22,8 @@ var (
 	netInterface = flag.StringP("interface", "i", "", "network interface to sniff")
 	infile       = flag.StringP("read", "r", "", "file to read (- for stdin)")
 	bufferSize   = flag.IntP("buffersize", "b", 8, "MiB of kernel buffer for packet data")
-	ports        = flag.IntSliceP("ports", "p", []int{11211}, "memcached ports to listen on")
+	protocol     = flag.StringP("protocol", "P", "infer", "datastore protocol (one of mctext, redis, or infer to guess based on content)")
+	ports        = flag.IntSliceP("ports", "p", []int{6379, 11211}, "ports to listen on")
 
 	assemblyWorkers = flag.Int("assemblyworkers", 8, "number of TCP assembly workers")
 	decodeWorkers   = flag.Int("decodeworkers", 8, "number of decode workers")
@@ -65,13 +67,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	protocolType := model.GetProtocolType(*protocol)
+	if protocolType == model.ProtocolUnknown {
+		log.ConsoleLogger{}.Log("unknown protocol: ", *protocol)
+		os.Exit(1)
+	}
+
 	packetSource, err := capture.New(*netInterface, *infile, *bufferSize, *noDelay, *ports)
 	if err != nil {
 		log.ConsoleLogger{}.Log(err)
 		os.Exit(2)
 	}
 
-	decodePool := decode.NewPool(logger, *decodeWorkers, packetSource, packetHandler(analysisPool))
+	decodePool := decode.NewPool(logger, *decodeWorkers, packetSource, packetHandler(protocolType, analysisPool))
 	eofChan := make(chan struct{}, 1)
 	go func() {
 		decodePool.Run()
@@ -130,8 +138,8 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 	}
 }
 
-func packetHandler(analysisPool *analysis.Pool) func(dps []*decode.DecodedPacket) {
-	pool := assembly.New(logger, analysisPool, *ports, *assemblyWorkers)
+func packetHandler(protocol model.ProtocolType, analysisPool *analysis.Pool) func(dps []*decode.DecodedPacket) {
+	pool := assembly.New(logger, analysisPool, protocol, *ports, *assemblyWorkers)
 	return func(dps []*decode.DecodedPacket) {
 		err := pool.HandlePackets(dps)
 		if err != nil {

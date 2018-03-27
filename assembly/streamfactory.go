@@ -6,8 +6,10 @@ import (
 
 	"github.com/box/memsniff/analysis"
 	"github.com/box/memsniff/log"
+	"github.com/box/memsniff/protocol/infer"
 	"github.com/box/memsniff/protocol/mctext"
 	"github.com/box/memsniff/protocol/model"
+	"github.com/box/memsniff/protocol/redis"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/tcpassembly"
@@ -38,9 +40,10 @@ func (c *connectionKey) DstString() string {
 }
 
 type streamFactory struct {
-	logger        log.Logger
-	analysis      *analysis.Pool
-	memcachePorts []int
+	logger   log.Logger
+	analysis *analysis.Pool
+	protocol model.ProtocolType
+	ports    []int
 
 	halfOpen map[connectionKey]*model.Consumer
 }
@@ -50,7 +53,7 @@ type streamFactory struct {
 // For now we accept that possibility, but we could try to infer based on source IP as well.
 func (sf *streamFactory) IsFromServer(transportFlow gopacket.Flow) bool {
 	port := srcPort(transportFlow)
-	return isInPortlist(sf.memcachePorts, port)
+	return isInPortlist(sf.ports, port)
 }
 
 func srcPort(transportFlow gopacket.Flow) int {
@@ -99,7 +102,17 @@ func (sf *streamFactory) New(netFlow, transportFlow gopacket.Flow) tcpassembly.S
 }
 
 func (sf *streamFactory) createConsumer(ck connectionKey) *model.Consumer {
-	return mctext.NewConsumer(nil, sf.analysis.HandleEvents)
+	logger := log.NewContext(sf.logger, ck.DstString())
+	var fsm model.Fsm
+	switch sf.protocol {
+	case model.ProtocolInfer:
+		fsm = infer.NewFsm(logger)
+	case model.ProtocolMemcacheText:
+		fsm = mctext.NewFsm(logger)
+	case model.ProtocolRedis:
+		fsm = redis.NewFsm(logger)
+	}
+	return model.New(sf.analysis.HandleEvents, fsm)
 }
 
 func (sf *streamFactory) log(items ...interface{}) {

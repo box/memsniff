@@ -21,6 +21,16 @@ func NewBuffer(cap int) *Buffer {
 	}
 }
 
+// Truncate discards any pending data in this buffer.
+// It does not reset 'discard', which is pending data yet to arrive that is still
+// behind the conceptual read cursor.  That (pending) data still needs to be read and
+// discarded.
+func (b *Buffer) Truncate() {
+	b.buf.Reset()
+	b.len = 0
+	b.blocks = b.blocks[:0]
+}
+
 func (b *Buffer) Reset() {
 	b.buf.Reset()
 	b.len = 0
@@ -65,12 +75,12 @@ func (b *Buffer) Len() int {
 }
 
 func (b *Buffer) ReadN(n int) (out []byte, err error) {
-	if b.len < n {
-		return nil, ErrShortRead
-	}
 	avail, gap := b.contiguousAvailable()
+	out = b.buf.Bytes()[:avail]
+	if b.len < n {
+		return out, ErrShortRead
+	}
 	if avail < n {
-		out = b.buf.Bytes()[:avail]
 		b.Discard(avail + gap)
 		return out, ErrLostData{gap}
 	}

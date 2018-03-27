@@ -8,14 +8,14 @@ import (
 // KeyAggregator tracks data across all requested event fields for a single key.
 type KeyAggregator struct {
 	// Key is the list of key fields over which we are aggregating.
-	Key         []string
+	Key []string
 
 	// aggFieldIDs is the list of event fields whose values we take for aggregation,
 	// in the same order as aggs and as the descriptor string provided to the
 	// KeyAggregatorFactory.
 	aggFieldIDs []model.EventFieldMask
 	// aggs is the actual aggregators, in the same order as the descriptor string.
-	aggs        []Aggregator
+	aggs []Aggregator
 }
 
 // Add updates all aggregators tracked for this key according to the provided event.

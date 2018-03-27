@@ -9,7 +9,7 @@ install:
 	go install -x -ldflags "$(ldflags)" $(packages)
 
 test:
-	go test -v -x -ldflags "$(ldflags)" $(packages)
+	go test -v -ldflags "$(ldflags)" $(packages)
 
 $(gometalinter):
 	go get -u gopkg.in/alecthomas/gometalinter.v1
