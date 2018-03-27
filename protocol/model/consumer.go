@@ -18,19 +18,6 @@ func init() {
 	eofSource.ReassemblyComplete()
 }
 
-// Event is a single event in a datastore conversation
-type Event struct {
-	// Type of the event.
-	Type EventType
-	// Datastore key affected by this event.
-	Key string
-	// Size of the datastore value affected by this event.
-	Size int
-}
-
-// EventHandler consumes a batch of events.
-type EventHandler func(evts []Event)
-
 // Reader represents a subset of the bufio.Reader interface.
 type Reader interface {
 	// Discard skips the next n bytes, returning the number of bytes discarded.

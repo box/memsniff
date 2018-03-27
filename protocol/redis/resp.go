@@ -13,10 +13,13 @@ const (
 	tagInt    = ':'
 	tagBulk   = '$'
 	tagArray  = '*'
+
+	stackLimit = 8
 )
 
 var (
 	ProtocolErr = errors.New("RESP protocol error")
+	RecursionLimitErr = errors.New("too many nested RESP arrays")
 )
 
 type ParserOptions struct {
@@ -25,16 +28,29 @@ type ParserOptions struct {
 
 // RespParser implements a stack machine to support RESP's potentially infinite
 // nested arrays.
+//
+// When there is insufficient data to make progress, the stack is left in its
+// current state and execution is resumed by calling run on the top stack frame
+// when new data is available from the network. Similarly, whenever the state of
+// reading data from the Reader changes, the state of the stack must change by
+// pushing or popping frames.
+//
+// When a stack frame finishes execution it records its result in the prior stack
+// frame.  The first frame of the stack is the "root" of the parse tree, and is a
+// dummy frame to store the final parse result, and has no associated logic.  The
+// parse is complete when stack contains only this root frame.
 type RespParser struct {
 	stack   []stackFrame
 	Options ParserOptions
 }
 
+// stackFrame holds a resumable piece of execution state.
 type stackFrame struct {
 	run    func() error
 	result interface{}
 }
 
+// NewParser creates a parser ready to read a single RESP value from r.
 func NewParser(r *reader.Reader) *RespParser {
 	p := &RespParser{
 		// start with root frame to contain eventual result
@@ -44,6 +60,8 @@ func NewParser(r *reader.Reader) *RespParser {
 	return p
 }
 
+// Reset discards all current state and prepares the parser to read a
+// single RESP value from r.
 func (p *RespParser) Reset(r *reader.Reader) {
 	p.stack = p.stack[:1]
 	p.startParseValue(r)
@@ -79,6 +97,8 @@ func (p *RespParser) push(f func() error) {
 	p.stack = append(p.stack, stackFrame{run: f})
 }
 
+// pop removes the top frame from the stack, and places result in the previous
+// frame.
 func (p *RespParser) pop(result interface{}) {
 	p.stack = p.stack[:len(p.stack)-1]
 	p.stack[len(p.stack)-1].result = result
@@ -86,6 +106,9 @@ func (p *RespParser) pop(result interface{}) {
 
 func (p *RespParser) startParseValue(r *reader.Reader) {
 	p.push(func() error {
+		if len(p.stack) > stackLimit {
+			return RecursionLimitErr
+		}
 		out, err := r.ReadN(1)
 		if err != nil {
 			return err

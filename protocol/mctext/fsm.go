@@ -24,11 +24,11 @@ var (
 
 // fsm generates events based on a memcached text protocol conversation.
 type fsm struct {
-	logger log.Logger
+	logger   log.Logger
 	consumer *model.Consumer
-	state state
-	cmd  string
-	args []string
+	state    state
+	cmd      string
+	args     []string
 }
 
 type state func() error
@@ -37,7 +37,7 @@ func NewFsm(logger log.Logger) model.Fsm {
 	fsm := &fsm{
 		logger: logger,
 	}
-	fsm.state = fsm.peekMagicByte
+	fsm.state = fsm.peekBinaryProtocolMagicByte
 	return fsm
 }
 
@@ -64,7 +64,7 @@ func (f *fsm) Run() {
 	}
 }
 
-func (f *fsm) peekMagicByte() error {
+func (f *fsm) peekBinaryProtocolMagicByte() error {
 	f.consumer.ServerReader.Truncate()
 	firstByte, err := f.consumer.ClientReader.PeekN(1)
 	if err != nil {

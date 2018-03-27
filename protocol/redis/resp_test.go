@@ -1,13 +1,14 @@
 package redis
 
 import (
-	"github.com/box/memsniff/assembly/reader"
-	"github.com/google/gopacket/tcpassembly"
-	"github.com/davecgh/go-spew/spew"
 	"bytes"
 	"reflect"
 	"regexp"
 	"testing"
+
+	"github.com/box/memsniff/assembly/reader"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/google/gopacket/tcpassembly"
 )
 
 var (
@@ -136,7 +137,7 @@ func TestCaptureLargeBulk(t *testing.T) {
 	kb := string(make([]byte, 1024))
 	r := reader.New()
 	p := NewParser(r)
-	p.Options.BulkCaptureLimit = 128*1024
+	p.Options.BulkCaptureLimit = 64 * 1024
 	write(r, "$65536\n")
 	for i := 0; i < 64; i++ {
 		write(r, kb)
@@ -159,7 +160,19 @@ func TestCaptureLargeBulk(t *testing.T) {
 	}
 }
 
+func TestStackLimit(t *testing.T) {
+	r := reader.New()
+	p := NewParser(r)
+	for i := 0; i < 8; i++ {
+		write(r, "*1\n")
+	}
+	err := p.Run()
+	if err != RecursionLimitErr {
+		t.Error(err)
+	}
+}
+
 func write(r *reader.Reader, s string) {
 	s = replaceNL.ReplaceAllString(s, "\r\n")
-	r.Reassembled([]tcpassembly.Reassembly{{Bytes:[]byte(s)}})
+	r.Reassembled([]tcpassembly.Reassembly{{Bytes: []byte(s)}})
 }
