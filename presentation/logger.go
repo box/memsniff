@@ -48,7 +48,7 @@ func (u *uiContext) doReport(report analysis.Report, reportFile *os.File) {
 		colReport, err := json.Marshal(struct {
 			Message        string
 			AnalysisReport analysis.Report
-		}{
+		} {
 			Message: fmt.Sprintf("Top 20 %s", valColName),
 			AnalysisReport: analysis.Report {
 				Timestamp:   report.Timestamp,
@@ -69,7 +69,7 @@ func (u *uiContext) doReport(report analysis.Report, reportFile *os.File) {
 
 		_, err = reportFile.Write([]byte(fmt.Sprintf("%s\n", colReport)))
 		if err != nil {
-			log.Println("unable to write to the reportFile")
+			log.Println("unable to write to the reportFile", err)
 		}
 
 		err = syscall.Flock(int(reportFile.Fd()), syscall.LOCK_UN)
