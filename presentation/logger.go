@@ -12,7 +12,7 @@ import (
 )
 
 func (u *uiContext) runReporter() error {
-	reportFile, err := os.OpenFile(u.reportFilePath, os.O_APPEND|os.O_WRONLY, 0777)
+	reportFile, err := os.OpenFile(u.reportFilePath, os.O_APPEND | os.O_WRONLY | os.O_CREATE, 0777)
 	if err != nil {
 		return err
 	}
