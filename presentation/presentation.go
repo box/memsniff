@@ -18,14 +18,15 @@ type UIHandler interface {
 }
 
 type uiContext struct {
-	analysis     *analysis.Pool
-	interval     time.Duration
-	statProvider StatProvider
-	messages     []string
-	msgChan      chan string
-	prevReport   analysis.Report
-	cumulative   bool
-	paused       bool
+	analysis       *analysis.Pool
+	interval       time.Duration
+	statProvider   StatProvider
+	messages       []string
+	msgChan        chan string
+	prevReport     analysis.Report
+	cumulative     bool
+	paused         bool
+	reportFilePath string
 }
 
 // Stats collects statistics on runtime performance to be displayed to the user.
@@ -50,20 +51,21 @@ type Stats struct {
 type StatProvider func() Stats
 
 // New returns a UIHandler that is ready to run
-func New(analysisPool *analysis.Pool, interval time.Duration, cumulative bool, statProvider StatProvider) UIHandler {
+func New(analysisPool *analysis.Pool, interval time.Duration, cumulative bool, statProvider StatProvider, reportFilePath string) UIHandler {
 	return &uiContext{
-		analysis:     analysisPool,
-		interval:     interval,
-		statProvider: statProvider,
-		msgChan:      make(chan string, 128),
-		prevReport:   analysis.Report{},
-		cumulative:   cumulative,
-		paused:       false,
+		analysis:       analysisPool,
+		interval:       interval,
+		statProvider:   statProvider,
+		msgChan:        make(chan string, 128),
+		prevReport:     analysis.Report{},
+		cumulative:     cumulative,
+		paused:         false,
+		reportFilePath: reportFilePath,
 	}
 }
 
 func (u uiContext) Run() error {
-	return u.runTermbox()
+	return u.runReporter()
 }
 
 func (u uiContext) Log(items ...interface{}) {

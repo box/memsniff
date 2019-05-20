@@ -35,6 +35,8 @@ var (
 	interval   = flag.IntP("interval", "n", 1, "report top keys every this many seconds")
 	cumulative = flag.Bool("cumulative", false, "accumulate keys over all time instead of an interval")
 
+	reportFilePath = flag.String("reportfile", "/var/log/memsniff.report.log", "report file where the report will get printed")
+
 	noDelay = flag.Bool("nodelay", false, "replay from file at maximum speed instead of rate of original capture")
 	noGui   = flag.Bool("nogui", false, "disable interactive interface")
 
@@ -99,7 +101,7 @@ func main() {
 	} else {
 		updateInterval := time.Duration(*interval) * time.Second
 		statProvider := statGenerator(packetSource, decodePool, analysisPool)
-		cui := presentation.New(analysisPool, updateInterval, *cumulative, statProvider)
+		cui := presentation.New(analysisPool, updateInterval, *cumulative, statProvider, *reportFilePath)
 
 		logger.SetLogger(cui)
 		go buffered.WriteTo(cui)
