@@ -180,7 +180,7 @@ func (p *Percentile) Reset() {
 // IsValidAgg returns true if desc is a valid descriptor for an aggregator type.
 func IsValidAgg(desc string) bool {
 	switch desc {
-	case "max", "min", "mean", "avg", "sum":
+	case "max", "min", "mean", "avg", "sum", "cnt":
 		return true
 
 	default:
