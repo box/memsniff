@@ -37,7 +37,6 @@ func (c *Cnt) Add(n int64) {
 	if !c.seenFirst {
 		c.count = 0
 		c.seenFirst = true
-		return
 	}
 	c.count += 1
 }

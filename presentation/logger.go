@@ -50,7 +50,7 @@ func (u *uiContext) doReport(report analysis.Report, reportFile *os.File) {
 			AnalysisReport analysis.Report
 		}{
 			Message: fmt.Sprintf("Top 20 %s", valColName),
-			AnalysisReport: analysis.Report{
+			AnalysisReport: analysis.Report {
 				Timestamp:   report.Timestamp,
 				KeyColNames: report.KeyColNames,
 				ValColNames: report.ValColNames,
