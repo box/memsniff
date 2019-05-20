@@ -28,6 +28,29 @@ func (b BadDescriptorError) Error() string {
 	return fmt.Sprintln("Bad aggregate type:", string(b))
 }
 
+type Cnt struct {
+	count     int64
+	seenFirst bool
+}
+
+func (c *Cnt) Add(n int64) {
+	if !c.seenFirst {
+		c.count = 0
+		c.seenFirst = true
+		return
+	}
+	c.count += 1
+}
+
+func (c *Cnt) Result() int64 {
+	return c.count
+}
+
+func (c *Cnt) Reset() {
+	c.seenFirst = false
+	c.count = 0
+}
+
 // Max retains the maximum value in the aggregated data.
 type Max struct {
 	max       int64
@@ -199,6 +222,9 @@ func NewFactoryFromDescriptor(desc string) (AggregatorFactory, error) {
 
 	case "sum":
 		return func() Aggregator { return &Sum{} }, nil
+
+	case "cnt":
+		return func() Aggregator { return &Cnt{} }, nil
 
 	default:
 		if len(desc) >= 3 && desc[0] == 'p' {
