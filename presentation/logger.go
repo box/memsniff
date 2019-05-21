@@ -54,7 +54,7 @@ func (u *uiContext) doReport(report analysis.Report, reportFile *os.File) {
 
 		// making a slice explicitly to get empty array incase of json marshal
 		rows := make([]analysis.ReportRow, len(report.Rows[:min(len(report.Rows), 20)]))
-		rows[:] = report.Rows[:min(len(report.Rows), 20)][:]
+		copy(rows, report.Rows[:min(len(report.Rows), 20)])
 		colReport, err := json.Marshal(struct {
 			Message             string            `json:"message"`
 			AggregateColumnName string            `json:"aggregate_column_name"`
