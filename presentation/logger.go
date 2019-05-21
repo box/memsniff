@@ -30,6 +30,13 @@ func (u *uiContext) runReporter() error {
 	}
 }
 
+func min(x int, y int) int {
+	if x < y {
+		return x
+	}
+	return y
+}
+
 func (u *uiContext) doReport(report analysis.Report, reportFile *os.File) {
 	for idx, valColName := range report.ValColNames {
 		sortOrder := []int{-(len(report.KeyColNames) + idx)}
@@ -60,7 +67,7 @@ func (u *uiContext) doReport(report analysis.Report, reportFile *os.File) {
 				Timestamp:   report.Timestamp,
 				KeyColNames: report.KeyColNames,
 				ValColNames: report.ValColNames,
-				Rows:        report.Rows[:20],
+				Rows:        report.Rows[:min(len(report.Rows), 20)],
 			},
 		})
 		if err != nil {
