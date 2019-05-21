@@ -12,7 +12,7 @@ import (
 )
 
 func (u *uiContext) runReporter() error {
-	reportFile, err := os.OpenFile(u.reportFilePath, os.O_APPEND | os.O_WRONLY | os.O_CREATE, 0777)
+	reportFile, err := os.OpenFile(u.reportFilePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0777)
 	if err != nil {
 		return err
 	}
@@ -46,11 +46,15 @@ func (u *uiContext) doReport(report analysis.Report, reportFile *os.File) {
 		report.SortBy(sortOrder...)
 
 		colReport, err := json.Marshal(struct {
-			Message        string
-			AnalysisReport analysis.Report
-		} {
-			Message: fmt.Sprintf("Top 20 %s", valColName),
-			AnalysisReport: analysis.Report {
+			Message             string          `json:"message"`
+			AggregateColumnName string          `json:"aggregate_column_name"`
+			EventType           string          `json:"event_type"`
+			AnalysisReport      analysis.Report `json:"analysis_report"`
+		}{
+			Message:             fmt.Sprintf("Top 20 %s", valColName),
+			AggregateColumnName: valColName,
+			EventType:           "z-memsniff-statistics",
+			AnalysisReport: analysis.Report{
 				Timestamp:   report.Timestamp,
 				KeyColNames: report.KeyColNames,
 				ValColNames: report.ValColNames,

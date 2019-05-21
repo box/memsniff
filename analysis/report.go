@@ -7,18 +7,18 @@ import (
 
 // ReportRow contains activity information for a single cache key.
 type ReportRow struct {
-	Key    []string
-	Values []int64
+	Key    []string `json:"key"`
+	Values []int64  `json:"values"`
 }
 
 // Report represents key activity submitted to a Pool since the last call to
 // Reset.
 type Report struct {
 	// when this report was generated
-	Timestamp   time.Time
-	KeyColNames []string
-	ValColNames []string
-	Rows        []ReportRow
+	Timestamp   time.Time   `json:"timestamp"`
+	KeyColNames []string    `json:"key_col_names"`
+	ValColNames []string    `json:"val_col_names"`
+	Rows        []ReportRow `json:"rows"`
 }
 
 func (r *Report) SortBy(columns ...int) {

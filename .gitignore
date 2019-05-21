@@ -3,3 +3,4 @@
 /memsniff
 *.pcap
 *.pprof
+vendor/*
