@@ -27,6 +27,7 @@ type uiContext struct {
 	cumulative     bool
 	paused         bool
 	reportFilePath string
+	extras         map[string]string
 }
 
 // Stats collects statistics on runtime performance to be displayed to the user.
@@ -51,7 +52,7 @@ type Stats struct {
 type StatProvider func() Stats
 
 // New returns a UIHandler that is ready to run
-func New(analysisPool *analysis.Pool, interval time.Duration, cumulative bool, statProvider StatProvider, reportFilePath string) UIHandler {
+func New(analysisPool *analysis.Pool, interval time.Duration, cumulative bool, statProvider StatProvider, reportFilePath string, extras map[string]string) UIHandler {
 	return &uiContext{
 		analysis:       analysisPool,
 		interval:       interval,
@@ -61,6 +62,7 @@ func New(analysisPool *analysis.Pool, interval time.Duration, cumulative bool, s
 		cumulative:     cumulative,
 		paused:         false,
 		reportFilePath: reportFilePath,
+		extras:         extras,
 	}
 }
 

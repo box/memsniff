@@ -46,14 +46,16 @@ func (u *uiContext) doReport(report analysis.Report, reportFile *os.File) {
 		report.SortBy(sortOrder...)
 
 		colReport, err := json.Marshal(struct {
-			Message             string          `json:"message"`
-			AggregateColumnName string          `json:"aggregate_column_name"`
-			EventType           string          `json:"event_type"`
-			AnalysisReport      analysis.Report `json:"analysis_report"`
+			Message             string            `json:"message"`
+			AggregateColumnName string            `json:"aggregate_column_name"`
+			EventType           string            `json:"event_type"`
+			Extras              map[string]string `json:"extras"`
+			AnalysisReport      analysis.Report   `json:"analysis_report"`
 		}{
 			Message:             fmt.Sprintf("Top 20 %s", valColName),
 			AggregateColumnName: valColName,
 			EventType:           "z-memsniff-statistics",
+			Extras:              u.extras,
 			AnalysisReport: analysis.Report{
 				Timestamp:   report.Timestamp,
 				KeyColNames: report.KeyColNames,

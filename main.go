@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/box/memsniff/protocol/model"
 	"os"
@@ -34,6 +35,7 @@ var (
 	format     = flag.StringP("format", "f", "key,max(size),sum(size)", "fields (key, size) and aggregates (avg, max, min, sum, p50 (median), p995 (99.5th percentile), etc.) to display")
 	interval   = flag.IntP("interval", "n", 1, "report top keys every this many seconds")
 	cumulative = flag.Bool("cumulative", false, "accumulate keys over all time instead of an interval")
+	extras     = flag.String("extras", "{}", "extra details that needs to be merged into each of the events, this must be map[string]string")
 
 	reportFilePath = flag.String("reportfile", "/var/log/memsniff.report.log", "report file where the report will get printed")
 
@@ -49,6 +51,14 @@ func main() {
 	flag.Parse()
 	if *displayVersion {
 		log.ConsoleLogger{}.Log(fmt.Sprintf("memsniff version %v (revision %v)", Version, GitRevision))
+		return
+	}
+
+	_extras := map[string]string{}
+
+	err := json.Unmarshal([]byte(*extras), &_extras)
+	if err != nil {
+		log.ConsoleLogger{}.Log(fmt.Sprintf("invalid param extras, got json.Unmarshall error(%v)", err))
 		return
 	}
 
@@ -101,7 +111,7 @@ func main() {
 	} else {
 		updateInterval := time.Duration(*interval) * time.Second
 		statProvider := statGenerator(packetSource, decodePool, analysisPool)
-		cui := presentation.New(analysisPool, updateInterval, *cumulative, statProvider, *reportFilePath)
+		cui := presentation.New(analysisPool, updateInterval, *cumulative, statProvider, *reportFilePath, _extras)
 
 		logger.SetLogger(cui)
 		go buffered.WriteTo(cui)
