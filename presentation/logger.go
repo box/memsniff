@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/box/memsniff/analysis"
+	"github.com/box/memsniff/internal/pkg/model"
 	"log"
 	"os"
 	"os/signal"
@@ -52,16 +53,10 @@ func (u *uiContext) doReport(report analysis.Report, reportFile *os.File) {
 		// descending sort of each value column
 		report.SortBy(sortOrder...)
 
-		// making a slice explicitly to get empty array incase of json marshal
+		// making a slice explicitly to get empty array in case of json marshal
 		rows := make([]analysis.ReportRow, len(report.Rows[:min(len(report.Rows), 20)]))
 		copy(rows, report.Rows[:min(len(report.Rows), 20)])
-		colReport, err := json.Marshal(struct {
-			Message             string            `json:"message"`
-			AggregateColumnName string            `json:"aggregate_column_name"`
-			EventType           string            `json:"event_type"`
-			Extras              map[string]string `json:"extras"`
-			AnalysisReport      analysis.Report   `json:"analysis_report"`
-		}{
+		colReport, err := json.Marshal(model.TopResultsModel{
 			Message:             fmt.Sprintf("Top 20 %s", valColName),
 			AggregateColumnName: valColName,
 			EventType:           "z-memsniff-statistics",
