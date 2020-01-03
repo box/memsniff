@@ -5,6 +5,7 @@ package presentation
 import (
 	"fmt"
 	"github.com/box/memsniff/analysis"
+	"github.com/box/memsniff/log"
 	"time"
 )
 
@@ -18,6 +19,7 @@ type UIHandler interface {
 }
 
 type uiContext struct {
+	logger       log.Logger
 	analysis     *analysis.Pool
 	interval     time.Duration
 	statProvider StatProvider
@@ -26,6 +28,15 @@ type uiContext struct {
 	prevReport   analysis.Report
 	cumulative   bool
 	paused       bool
+	useGui       bool
+	topX         uint16
+	maxVal       uint64
+	outputFile   string
+}
+
+type StatsSet struct {
+	Culumative	*Stats
+	Incremental *Stats
 }
 
 // Stats collects statistics on runtime performance to be displayed to the user.
@@ -47,11 +58,14 @@ type Stats struct {
 }
 
 // StatProvider returns a snapshot of current runtime statistics.
-type StatProvider func() Stats
+type StatProvider func() StatsSet
 
 // New returns a UIHandler that is ready to run
-func New(analysisPool *analysis.Pool, interval time.Duration, cumulative bool, statProvider StatProvider) UIHandler {
+func New(logger log.Logger, analysisPool *analysis.Pool, interval time.Duration, cumulative bool, statProvider StatProvider,
+		useGui bool, topX uint16, maxVal uint64, outputFile string) UIHandler {
+
 	return &uiContext{
+		logger:		  logger,
 		analysis:     analysisPool,
 		interval:     interval,
 		statProvider: statProvider,
@@ -59,13 +73,41 @@ func New(analysisPool *analysis.Pool, interval time.Duration, cumulative bool, s
 		prevReport:   analysis.Report{},
 		cumulative:   cumulative,
 		paused:       false,
+		useGui:       useGui,
+		topX:         topX,
+		maxVal:       maxVal,
+		outputFile:   outputFile,
 	}
 }
 
 func (u uiContext) Run() error {
-	return u.runTermbox()
+	if(u.useGui) {
+		return u.runTermbox()
+	} else {
+		return u.runLoggingEventLoop()
+	}
 }
 
 func (u uiContext) Log(items ...interface{}) {
-	u.msgChan <- fmt.Sprintln(items...)
+	u.msgChan <- fmt.Sprint(items...)
 }
+
+func (u *uiContext) truncateResultsToMaxAndTopX(rep *analysis.Report) {
+	repRows := rep.Rows
+	i := -1
+	for n, r := range repRows {
+		if r.Values[1] >= int64(u.maxVal) && n < int(u.topX) {
+			i++
+		} else {
+			break
+		}
+	}
+
+	if i >= 0 {
+		rep.Rows = repRows[:(i+1)]
+	} else {
+		rep.Rows = []analysis.ReportRow{}
+	}
+
+}
+

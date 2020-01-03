@@ -50,7 +50,7 @@ func (u *uiContext) eventLoop() error {
 			}
 
 		case msg := <-u.msgChan:
-			u.handleNewMessage(msg)
+			u.handleNewMessage(msg + "\n")
 
 		case ev := <-events:
 			if err := u.handleEvent(ev); err != nil {
@@ -164,12 +164,12 @@ func (u *uiContext) renderFooter(rep analysis.Report) {
 	stats := u.statProvider()
 	renderText(0, y, rep.Timestamp.Format("15:04:05.000"))
 
-	renderText(2, y, dropLabel(stats))
-	renderText(4, y, fmt.Sprintf("Packets: %10d", stats.PacketsPassedFilter))
-	renderText(6, y, fmt.Sprintf("GET responses: %10d", stats.ResponsesParsed))
+	renderText(2, y, u.dropLabel(*stats.Incremental))
+	renderText(4, y, fmt.Sprintf("Packets: %10d", stats.Incremental.PacketsPassedFilter))
+	renderText(6, y, fmt.Sprintf("GET responses: %10d", stats.Incremental.ResponsesParsed))
 }
 
-func dropLabel(s Stats) string {
+func (u *uiContext) dropLabel(s Stats) string {
 	var dropRate float64
 	if s.PacketsPassedFilter == 0 {
 		dropRate = 0
@@ -222,9 +222,11 @@ func (u *uiContext) update() error {
 	// so we don't get a big burst of data on unpause.
 	rep := u.analysis.Report(!u.cumulative)
 	if !u.paused {
+		rep.SortBy(-2)
+		u.truncateResultsToMaxAndTopX(&rep)
 		u.prevReport = rep
-		u.prevReport.SortBy(-2)
 	}
+
 	renderHeader(u.prevReport)
 	renderReport(u.prevReport)
 	u.renderFooter(u.prevReport)
