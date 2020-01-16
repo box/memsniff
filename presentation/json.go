@@ -2,7 +2,6 @@ package presentation
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/box/memsniff/analysis"
 	"os"
 	"time"
@@ -39,54 +38,64 @@ func (u *uiContext) updateReport() error {
 
 	u.truncateResultsToMaxAndTopX(&rep)
 	u.prevReport = rep
-	numReportedKeys := len(rep.Rows)
 	reportedKeysBandwidth := totalBytesUseForKeys(rep.Rows)
 
-	f, err := u.openFile(u.outputFile)
-	if err != nil {
-		return err
+	var f *os.File = nil
+	if u.outputFile != "" {
+		var err error
+		f, err = os.OpenFile(u.outputFile, os.O_RDWR|os.O_CREATE|os.O_APPEND|os.O_SYNC, 0644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
 	}
-	defer f.Close()
 
-	reportJson, _ := formatReportAsJson(u.prevReport, s, numKeysSeen, totalBandwidthUsed,numReportedKeys,reportedKeysBandwidth)
+	reportJson := formatReportAsJson(u.prevReport, s, numKeysSeen, totalBandwidthUsed, reportedKeysBandwidth)
+	reportJsonBytes, err := json.Marshal(reportJson)
+	reportJsonString := string(reportJsonBytes)
 
-	u.Log(fmt.Sprintf("All_Keys(Bandwidth=%d,Num=%d) Reported_Keys(Bandwidth=%d (%f%%),Num=%d) Incremental(Packets: %d Responses: %d %s) Cumulative(Packets: %d Responses: %d %s)",
-		totalBandwidthUsed, numKeysSeen,
-		reportedKeysBandwidth, 100*float64(reportedKeysBandwidth)/float64(totalBandwidthUsed), numReportedKeys,
-		s.Incremental.PacketsPassedFilter, s.Incremental.ResponsesParsed, u.dropLabel(*s.Incremental),
-		s.Culumative.PacketsPassedFilter, s.Culumative.ResponsesParsed, u.dropLabel(*s.Culumative)))
-
-	if f != nil {
-		// Write to the output file if specified
-		f.WriteString(string(reportJson) + "\n")
+	if err != nil {
+		u.Log(err)
 	} else {
-		u.Log(string(reportJson))
+		if f != nil {
+			// Write to the output file if specified
+			f.WriteString(reportJsonString + "\n")
+		} else {
+			u.Log(reportJsonString)
+		}
 	}
 
 	return nil
 }
 
-func (u *uiContext) openFile(filename string) (*os.File, error) {
-	if filename != "" {
-		f, err := os.OpenFile(u.outputFile, os.O_RDWR|os.O_CREATE|os.O_APPEND|os.O_SYNC, 0644)
-		return f, err
-	} else {
-		return nil, nil
-	}
+type JsonReport struct {
+	Timestamp                   string
+	TotalKeys                   int
+	TotalBandwidth              int64
+	ReportedKeys                int
+	ReportedBandwidth           int64
+	ReportedBandwidthPercentage float64
+	Rows                        []map[string]interface{}
+	Stats                       StatsSet
 }
 
-func formatReportAsJson(report analysis.Report, stats StatsSet, totalKeys int, totalBandwidth int64, reportedKeys int, reportedBandwidth int64) ([]byte, error) {
-	reportMap := map[string]interface{}{}
-	reportMap["ts"] = report.Timestamp.UTC().Unix()
-	reportMap["ts_s"] = report.Timestamp.String()
-	reportMap["totalKeys"] = totalKeys
-	reportMap["totalBandwidth"] = totalBandwidth
-	reportMap["reportedKeys"] = reportedKeys
-	reportMap["reportedBandwidth"] = reportedBandwidth
-	reportMap["reportedBandwidthPercentage"] = 100*float64(reportedBandwidth)/float64(totalBandwidth)
-	reportMap["rows"] = reportToList(report)
-	reportMap["stats"] = statsSetToMap(stats)
-	return json.Marshal(reportMap)
+func formatReportAsJson(report analysis.Report, stats StatsSet, totalKeys int, totalBandwidth int64, reportedBandwidth int64) JsonReport {
+	var reportedBandwidthPercentage float64 = 0
+	if reportedBandwidth > 0 && totalBandwidth > 0 {
+		reportedBandwidthPercentage = 100 * float64(reportedBandwidth) / float64(totalBandwidth)
+	}
+
+	return JsonReport{
+		Timestamp:                   report.Timestamp.Format("2006-01-02T15:04:05-0700"),
+		TotalKeys:                   totalKeys,
+		TotalBandwidth:              totalBandwidth,
+		ReportedKeys:                len(report.Rows),
+		ReportedBandwidth:           reportedBandwidth,
+		ReportedBandwidthPercentage: reportedBandwidthPercentage,
+
+		Rows:  reportToList(report),
+		Stats: stats,
+	}
 }
 
 func reportToList(report analysis.Report) []map[string]interface{} {
@@ -111,30 +120,15 @@ func reportRowToMap(reportRow analysis.ReportRow, keyColNames []string, valueCol
 	return rowMap
 }
 
-func statsSetToMap(stats StatsSet) map[string]interface{} {
-	statsSetMap := map[string]interface{}{}
-	statsSetMap["incremental"] = statsToMap(*stats.Incremental)
-	return statsSetMap
-}
-
-func statsToMap(stats Stats) map[string]interface{} {
-	statsMap := map[string]interface{}{}
-	statsMap["PacketsEnteredFilter"] = stats.PacketsEnteredFilter
-	statsMap["PacketsPassedFilter"] = stats.PacketsPassedFilter
-	statsMap["PacketsCaptured"] = stats.PacketsCaptured
-	statsMap["PacketsDroppedKernel"] = stats.PacketsDroppedKernel
-	statsMap["PacketsDroppedParser"] = stats.PacketsDroppedParser
-	statsMap["PacketsDroppedAnalysis"] = stats.PacketsDroppedAnalysis
-	statsMap["PacketsDroppedTotal"] = stats.PacketsDroppedTotal
-	statsMap["ResponsesParsed"] = stats.ResponsesParsed
-	return statsMap
-}
-
 // Given a slice of rows, return the sum of the sum(size) columns
 func totalBytesUseForKeys(rows []analysis.ReportRow) int64 {
 	total := int64(0)
-	for _,r := range rows {
-		total = total + r.Values[1]
+	for _, r := range rows {
+		// This code assumes that we are using the default format, same as the sorting
+		// code.  This should also be updated whenever we update the sorting code to not
+		// depend on the default format.
+		const maxSizeIndex = 1
+		total = total + r.Values[maxSizeIndex]
 	}
 	return total
 }

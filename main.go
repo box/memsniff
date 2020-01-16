@@ -35,15 +35,13 @@ var (
 	interval   = flag.IntP("interval", "n", 1, "report top keys every this many seconds")
 	cumulative = flag.Bool("cumulative", false, "accumulate keys over all time instead of an interval")
 
-	noDelay = flag.Bool("nodelay", false, "replay from file at maximum speed instead of rate of original capture")
-	noGui   = flag.Bool("nogui", false, "disable interactive interface")
-
-	topX    = flag.Uint16("top", math.MaxUint16, "show max of this number of entries")
-	maxVal  = flag.Uint64("threshold", math.MaxUint64, "include keys whose sum(size) is greater than this")
+	noDelay             = flag.Bool("nodelay", false, "replay from file at maximum speed instead of rate of original capture")
+	noGui               = flag.Bool("nogui", false, "disable interactive interface")
+	topX                = flag.Uint16("top", math.MaxUint16, "show max of this number of entries")
+	minKeySizeThreshold = flag.Uint64("threshold", math.MaxUint64, "include keys whose sum(size) is greater than this")
+	outputFile          = flag.StringP("output", "o", "", "File to output to")
 
 	displayVersion = flag.Bool("version", false, "display version information")
-
-	outputFile = flag.String("file", "", "File to output to")
 )
 
 var logger = &log.ProxyLogger{}
@@ -93,7 +91,7 @@ func main() {
 
 	updateInterval := time.Duration(*interval) * time.Second
 	statProvider := statGenerator(packetSource, decodePool, analysisPool)
-	cui := presentation.New(logger, analysisPool, updateInterval, *cumulative, statProvider, ! *noGui, *topX, *maxVal, *outputFile)
+	cui := presentation.New(logger, analysisPool, updateInterval, *cumulative, statProvider, !*noGui, *topX, *minKeySizeThreshold, *outputFile)
 
 	if *noGui {
 		logger.SetLogger(log.ConsoleLogger{})
@@ -121,16 +119,7 @@ var incrementalStats presentation.Stats
 
 func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool, analysisPool *analysis.Pool) presentation.StatProvider {
 	return func() presentation.StatsSet {
-		previousStats := &presentation.Stats {
-			PacketsEnteredFilter   : cumulativeStats.PacketsEnteredFilter,
-			PacketsPassedFilter    : cumulativeStats.PacketsPassedFilter,
-			PacketsCaptured        : cumulativeStats.PacketsCaptured,
-			PacketsDroppedKernel   : cumulativeStats.PacketsDroppedKernel,
-			PacketsDroppedParser   : cumulativeStats.PacketsDroppedParser,
-			PacketsDroppedAnalysis : cumulativeStats.PacketsDroppedAnalysis,
-			PacketsDroppedTotal    : cumulativeStats.PacketsDroppedTotal,
-			ResponsesParsed        : cumulativeStats.ResponsesParsed,
-		}
+		previousStats := cumulativeStats
 
 		captureStats, err := captureProvider.Stats()
 		if err == nil {
@@ -149,16 +138,9 @@ func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool
 		cumulativeStats.PacketsPassedFilter = cumulativeStats.PacketsDroppedKernel + cumulativeStats.PacketsCaptured
 		cumulativeStats.PacketsDroppedTotal = cumulativeStats.PacketsDroppedKernel + cumulativeStats.PacketsDroppedParser + cumulativeStats.PacketsDroppedAnalysis
 
-		incrementalStats.PacketsEnteredFilter = cumulativeStats.PacketsEnteredFilter - previousStats.PacketsEnteredFilter
-		incrementalStats.PacketsPassedFilter = cumulativeStats.PacketsPassedFilter - previousStats.PacketsPassedFilter
-		incrementalStats.PacketsCaptured = cumulativeStats.PacketsCaptured - previousStats.PacketsCaptured
-		incrementalStats.PacketsDroppedKernel = cumulativeStats.PacketsDroppedKernel - previousStats.PacketsDroppedKernel
-		incrementalStats.PacketsDroppedParser = cumulativeStats.PacketsDroppedParser - previousStats.PacketsDroppedParser
-		incrementalStats.PacketsDroppedAnalysis = cumulativeStats.PacketsDroppedAnalysis - previousStats.PacketsDroppedAnalysis
-		incrementalStats.PacketsDroppedTotal = cumulativeStats.PacketsDroppedTotal - previousStats.PacketsDroppedTotal
-		incrementalStats.ResponsesParsed = cumulativeStats.ResponsesParsed - previousStats.ResponsesParsed
+		incrementalStats = cumulativeStats.Diff(previousStats)
 
-		return presentation.StatsSet {&cumulativeStats, &incrementalStats }
+		return presentation.StatsSet{&cumulativeStats, &incrementalStats}
 	}
 }
 
