@@ -86,7 +86,7 @@ func formatReportAsJson(report analysis.Report, stats StatsSet, totalKeys int, t
 	}
 
 	return JsonReport{
-		Timestamp:                   report.Timestamp.Format("2006-01-02T15:04:05-0700"),
+		Timestamp:                   report.Timestamp.Format(time.RFC3339),
 		TotalKeys:                   totalKeys,
 		TotalBandwidth:              totalBandwidth,
 		ReportedKeys:                len(report.Rows),

@@ -108,7 +108,7 @@ func (u uiContext) Log(items ...interface{}) {
 
 func (u *uiContext) truncateResultsToMaxAndTopX(rep *analysis.Report) {
 	repRows := rep.Rows
-	i := -1
+	i := 0
 	for n, r := range repRows {
 		if r.Values[1] >= int64(u.minKeySizeThreshold) && n < int(u.topX) {
 			i++
@@ -117,5 +117,5 @@ func (u *uiContext) truncateResultsToMaxAndTopX(rep *analysis.Report) {
 		}
 	}
 
-	rep.Rows = repRows[:(i + 1)]
+	rep.Rows = repRows[:(i)]
 }
