@@ -15,7 +15,7 @@
 package main
 
 // Version is the release version of memsniff.
-const Version = "1.4.0"
+const Version = "1.5.0"
 
 // GitRevision holds the HEAD revision when building memsniff.
 var GitRevision = "autopopulated by build.sh"

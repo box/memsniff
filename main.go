@@ -5,8 +5,8 @@ package main
 import (
 	"fmt"
 	"github.com/box/memsniff/protocol/model"
+	"math"
 	"os"
-	"os/signal"
 	"time"
 
 	"github.com/box/memsniff/analysis"
@@ -35,8 +35,11 @@ var (
 	interval   = flag.IntP("interval", "n", 1, "report top keys every this many seconds")
 	cumulative = flag.Bool("cumulative", false, "accumulate keys over all time instead of an interval")
 
-	noDelay = flag.Bool("nodelay", false, "replay from file at maximum speed instead of rate of original capture")
-	noGui   = flag.Bool("nogui", false, "disable interactive interface")
+	noDelay             = flag.Bool("nodelay", false, "replay from file at maximum speed instead of rate of original capture")
+	noGui               = flag.Bool("nogui", false, "disable interactive interface")
+	topX                = flag.Uint16("top", math.MaxUint16, "show max of this number of entries")
+	minKeySizeThreshold = flag.Uint64("threshold", math.MaxUint64, "include keys whose sum(size) is greater than this")
+	outputFile          = flag.StringP("output", "o", "", "File to output to")
 
 	displayVersion = flag.Bool("version", false, "display version information")
 )
@@ -86,55 +89,58 @@ func main() {
 		eofChan <- struct{}{}
 	}()
 
+	updateInterval := time.Duration(*interval) * time.Second
+	statProvider := statGenerator(packetSource, decodePool, analysisPool)
+	cui := presentation.New(logger, analysisPool, updateInterval, *cumulative, statProvider, !*noGui, *topX, *minKeySizeThreshold, *outputFile)
+
 	if *noGui {
 		logger.SetLogger(log.ConsoleLogger{})
 		buffered.WriteTo(logger)
-
-		exitChan := make(chan os.Signal, 1)
-		signal.Notify(exitChan, os.Interrupt)
-		select {
-		case <-exitChan:
-		case <-eofChan:
-		}
 	} else {
-		updateInterval := time.Duration(*interval) * time.Second
-		statProvider := statGenerator(packetSource, decodePool, analysisPool)
-		cui := presentation.New(analysisPool, updateInterval, *cumulative, statProvider)
-
 		logger.SetLogger(cui)
 		go buffered.WriteTo(cui)
+	}
 
-		err := cui.Run()
-		if err != nil {
+	runErr := cui.Run()
+
+	// If there is an error starting in termbox, let's log the error to console
+	if runErr != nil {
+		if !*noGui {
 			logger.SetLogger(log.ConsoleLogger{})
 			buffered.WriteTo(logger)
-			logger.Log(err)
 		}
+
+		logger.Log(err)
 	}
 }
 
-var stats presentation.Stats
+var cumulativeStats presentation.Stats
+var incrementalStats presentation.Stats
 
 func statGenerator(captureProvider capture.StatProvider, decodePool *decode.Pool, analysisPool *analysis.Pool) presentation.StatProvider {
-	return func() presentation.Stats {
+	return func() presentation.StatsSet {
+		previousStats := cumulativeStats
+
 		captureStats, err := captureProvider.Stats()
 		if err == nil {
-			stats.PacketsEnteredFilter = captureStats.PacketsReceived
-			stats.PacketsDroppedKernel = captureStats.PacketsIfDropped + captureStats.PacketsDropped
+			cumulativeStats.PacketsEnteredFilter = captureStats.PacketsReceived
+			cumulativeStats.PacketsDroppedKernel = captureStats.PacketsIfDropped + captureStats.PacketsDropped
 		}
 
 		decodeStats := decodePool.Stats()
-		stats.PacketsCaptured = decodeStats.PacketsCaptured
-		stats.PacketsDroppedParser = decodeStats.PacketsDropped
+		cumulativeStats.PacketsCaptured = decodeStats.PacketsCaptured
+		cumulativeStats.PacketsDroppedParser = decodeStats.PacketsDropped
 
 		analysisStats := analysisPool.Stats()
-		stats.ResponsesParsed = int(analysisStats.EventsHandled)
-		stats.PacketsDroppedAnalysis = int(analysisStats.EventsDropped)
+		cumulativeStats.ResponsesParsed = int(analysisStats.EventsHandled)
+		cumulativeStats.PacketsDroppedAnalysis = int(analysisStats.EventsDropped)
 
-		stats.PacketsPassedFilter = stats.PacketsDroppedKernel + stats.PacketsCaptured
-		stats.PacketsDroppedTotal = stats.PacketsDroppedKernel + stats.PacketsDroppedParser + stats.PacketsDroppedAnalysis
+		cumulativeStats.PacketsPassedFilter = cumulativeStats.PacketsDroppedKernel + cumulativeStats.PacketsCaptured
+		cumulativeStats.PacketsDroppedTotal = cumulativeStats.PacketsDroppedKernel + cumulativeStats.PacketsDroppedParser + cumulativeStats.PacketsDroppedAnalysis
 
-		return stats
+		incrementalStats = cumulativeStats.Diff(previousStats)
+
+		return presentation.StatsSet{&cumulativeStats, &incrementalStats}
 	}
 }
 
