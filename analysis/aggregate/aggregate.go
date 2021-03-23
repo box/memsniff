@@ -2,7 +2,7 @@ package aggregate
 
 import (
 	"fmt"
-	"github.com/codahale/hdrhistogram"
+	"github.com/HdrHistogram/hdrhistogram-go"
 	"math"
 	"strconv"
 )
